@@ -5,7 +5,7 @@
   "description": "Lavu — a terminal-first personal engineering agent orchestrated by Luna.",
   "type": "module",
   "bin": {
-    "lavu": "./src/cli.ts"
+    "lavu": "./bin/lavu.mjs"
   },
   "scripts": {
     "dev": "tsx src/cli.ts repl",

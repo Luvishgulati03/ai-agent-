@@ -5,7 +5,9 @@ dist/
 data/*.json
 data/*.jsonl
 data/*.db
+data/*.db-*
 data/*.sqlite
+data/reviews/
 data/gmail-token.json
 memory/captured/
 .DS_Store

@@ -45,6 +45,8 @@ export class ApprovalStore {
     await this.ensure();
     const item = this.items.find((candidate) => candidate.id === id);
     if (!item) throw new Error(`Approval item not found: ${id}`);
+    const allowed = item.status === "pending" ? ["approved", "rejected"] : item.status === "approved" ? ["executed", "failed", "rejected"] : [];
+    if (!allowed.includes(status)) throw new Error(`Invalid approval transition: ${item.status} -> ${status}`);
     item.status = status;
     item.updatedAt = new Date().toISOString();
     if (result !== undefined) item.result = result;
