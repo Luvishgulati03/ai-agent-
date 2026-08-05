@@ -35,9 +35,12 @@ lavu dispatch pr-review "review the current pull request"
 lavu memory search "what did we decide about deploys?"
 lavu memory remember "Always run migrations before application deploys."
 lavu gmail inbox --limit 10
+lavu gmail draft --to someone@example.com --subject "Draft" --body "Do not send yet"
+lavu gmail reply --to someone@example.com --thread-id <gmail-thread-id> --subject "Re: Draft" --body "Staged reply"
 lavu approve list
 lavu approve send <approval-id>
 lavu schedule daemon
+lavu schedule install
 ```
 
 ## Important safety boundary

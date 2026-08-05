@@ -8,6 +8,9 @@ data/*.db
 data/*.db-*
 data/*.sqlite
 data/reviews/
+data/*.cron
+data/*.plist
+data/*.log
 data/gmail-token.json
 memory/captured/
 .DS_Store

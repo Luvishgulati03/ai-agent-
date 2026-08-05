@@ -107,12 +107,14 @@ npx tsx src/cli.ts dispatch architect "propose the next safe phase"
 npx tsx src/cli.ts gmail auth
 npx tsx src/cli.ts gmail inbox --limit 10
 npx tsx src/cli.ts gmail draft --to someone@example.com --subject "Draft" --body "Do not send yet"
+npx tsx src/cli.ts gmail reply --to someone@example.com --thread-id <gmail-thread-id> --subject "Re: Draft" --body "Staged reply"
 npx tsx src/cli.ts review 123 --cwd /path/to/target/repository
 npx tsx src/cli.ts approve list
 npx tsx src/cli.ts approve approve <approval-id>
 npx tsx src/cli.ts approve send <approval-id>
 npx tsx src/cli.ts schedule list
 npx tsx src/cli.ts schedule daemon
+npx tsx src/cli.ts schedule install
 ```
 
 Dashboard default: http://127.0.0.1:7337.

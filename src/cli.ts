@@ -4,6 +4,7 @@ import { stdin as input, stdout as output } from "node:process";
 import path from "node:path";
 import { LavuRuntime } from "./runtime.ts";
 import { startDashboard } from "./dashboard/server.ts";
+import { writeCronFile, writeLaunchdPlist } from "./scheduler/install.ts";
 
 const args = process.argv.slice(2);
 
@@ -77,12 +78,12 @@ async function main(): Promise<void> {
       const sub = args[1] || "inbox";
       if (sub === "auth") { await runtime.gmail.authorize(); console.log("Gmail connected."); }
       else if (sub === "inbox") print(await runtime.gmail.inbox(Number(option("--limit") || 10)));
-      else if (sub === "send" || sub === "draft") {
+      else if (sub === "send" || sub === "draft" || sub === "reply") {
         const to = option("--to"); const subject = option("--subject"); const body = option("--body") || args.slice(2).filter((item) => !item.startsWith("--") && item !== to && item !== subject).join(" ");
         if (!to || !subject || !body) throw new Error("Usage: lavu gmail draft --to email --subject subject --body body");
-        const item = await runtime.gmail.queueEmail({ to, subject, body });
+        const item = await runtime.gmail.queueEmail({ to, subject, body, threadId: option("--thread-id") });
         print({ message: "Saved locally and queued for Dad's approval", approvalId: item.id, dashboard: `http://${runtime.config.host}:${runtime.config.port}` });
-      } else throw new Error("Usage: lavu gmail auth|inbox|draft");
+      } else throw new Error("Usage: lavu gmail auth|inbox|draft|reply");
     } else if (command === "review") {
       const target = args[1];
       if (!target) throw new Error("Usage: lavu review <pr-number-or-url> [--cwd path] [--repo owner/name]");
@@ -100,7 +101,8 @@ async function main(): Promise<void> {
       if (sub === "list") print(await runtime.scheduler.definitions());
       else if (sub === "run") { const id = args[2]; const definition = (await runtime.scheduler.definitions()).find((item) => item.id === id); if (!definition) throw new Error(`Workflow not found: ${id}`); print(await runtime.scheduler.run(definition)); }
       else if (sub === "daemon") { await runtime.scheduler.start(); keepAlive = true; console.log("Lavu scheduler is running. Press Ctrl+C to stop."); }
-      else throw new Error("Usage: lavu schedule list|run <id>|daemon");
+      else if (sub === "install") { const definitions = await runtime.scheduler.definitions(); print({ cron: await writeCronFile(runtime.config, definitions), launchd: await writeLaunchdPlist(runtime.config, definitions), note: "Review the generated files before installing them into your user scheduler." }); }
+      else throw new Error("Usage: lavu schedule list|run <id>|daemon|install");
     } else throw new Error("Commands: ask, repl, dashboard, status, memory, dispatch, gmail, review, approve, schedule");
   } finally {
     if (!keepAlive) runtime.close();

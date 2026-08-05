@@ -14,7 +14,7 @@
     "test": "tsx --test tests/**/*.test.ts",
     "dashboard": "tsx src/cli.ts dashboard",
     "schedule": "tsx src/cli.ts schedule daemon",
-    "build": "tsc --outDir dist --declaration"
+    "build": "tsc --outDir dist --declaration --noEmit false"
   },
   "dependencies": {
     "croner": "^9.0.0",
