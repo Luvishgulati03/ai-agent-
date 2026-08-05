@@ -1,0 +1,16 @@
+[
+  {
+    "id": "nightly-engram-dream",
+    "name": "Nightly Engram dream",
+    "cron": "0 2 * * *",
+    "kind": "memory.dream",
+    "enabled": true
+  },
+  {
+    "id": "gmail-inbox-poll",
+    "name": "Gmail inbox poll",
+    "cron": "*/15 * * * *",
+    "kind": "gmail.inbox",
+    "enabled": false
+  }
+]

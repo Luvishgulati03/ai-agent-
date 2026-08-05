@@ -1,0 +1,30 @@
+{
+  "name": "lavu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lavu — a terminal-first personal engineering agent orchestrated by Luna.",
+  "type": "module",
+  "bin": {
+    "lavu": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts repl",
+    "start": "tsx src/cli.ts repl",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/**/*.test.ts",
+    "dashboard": "tsx src/cli.ts dashboard",
+    "schedule": "tsx src/cli.ts schedule daemon",
+    "build": "tsc --outDir dist --declaration"
+  },
+  "dependencies": {
+    "croner": "^9.0.0",
+    "dotenv": "^16.4.7",
+    "engram-memory": "github:anmolm-growthx/engram-memory#70453fd",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}

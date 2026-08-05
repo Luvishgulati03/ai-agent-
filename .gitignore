@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+data/*.json
+data/*.jsonl
+data/*.db
+data/*.sqlite
+data/gmail-token.json
+memory/captured/
+.DS_Store
