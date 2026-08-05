@@ -41,7 +41,13 @@ export class LavuMemory {
       "---", `title: ${JSON.stringify(content.slice(0, 80))}`, `created: ${now.toISOString()}`,
       `tier: ${input.tier || "episodic"}`, `importance: ${input.importance ?? 6}`, "---", "",
     ].join("\n");
-    await fs.writeFile(absolute, `${frontmatter}${content.trim()}\n`, "utf8");
+    let exists = false;
+    try { await fs.access(absolute); exists = true; } catch { exists = false; }
+    if (exists) {
+      await fs.appendFile(absolute, `\n## ${now.toISOString()}\n\n${content.trim()}\n`, "utf8");
+    } else {
+      await fs.writeFile(absolute, `${frontmatter}${content.trim()}\n`, "utf8");
+    }
     const id = await this.engine.add({
       content: content.trim(), source, tier: input.tier || "episodic",
       importance: input.importance ?? 6, metadata: input.metadata || null,
