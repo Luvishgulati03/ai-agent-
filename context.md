@@ -12,7 +12,7 @@ This file is the durable handoff for any other agentic IDE, model, or engineer w
 - Codex is the primary model/runtime. Claude is the fallback.
 - Codex execution preference: `danger-full-access` with no interactive approval prompts.
 - Gmail is the first email provider.
-- Gmail can be read. Responses can be generated and saved, but sending requires explicit Dad approval.
+- Gmail can be read. Responses can be generated and saved, but sending or replying requires explicit Dad approval. This is a non-negotiable hard guardrail.
 - Every outbound message requires the same approval gate: email, GitHub review comments, Slack, or any other external message.
 - Local file work, investigation, code execution, memory writes, and drafts do not require approval.
 - When uncertain: investigate briefly, then ask Dad.
@@ -35,6 +35,8 @@ The latest pushed phases are:
 
 1. `25c2a31` — scaffold, project config, docs, memory/workflow directories.
 2. `27f12d3` — provider runtime, Luna dispatch, Engram, dashboard, Gmail adapter, scheduler, PR review, approval queue, CLI, initial agent definitions.
+3. `1ac12d9` — installable cron and launchd scheduler artifacts.
+4. `8acb13e` — delegated QA coverage for Engram, scheduler, and approval transitions.
 
 The end-to-end Codex smoke test passed with:
 
@@ -86,6 +88,7 @@ Important source locations:
 - `AGENTS.md` — durable operating instructions.
 - `agents/` — specialist role descriptions.
 - `workflows/defaults.json` — scheduled workflow definitions.
+- `docs/e2e-test-plan.md` — the complete offline, provider, Gmail, dashboard, scheduler, and PR-review E2E plan.
 
 ## Commands
 
@@ -111,7 +114,8 @@ npx tsx src/cli.ts gmail reply --to someone@example.com --thread-id <gmail-threa
 npx tsx src/cli.ts review 123 --cwd /path/to/target/repository
 npx tsx src/cli.ts approve list
 npx tsx src/cli.ts approve approve <approval-id>
-npx tsx src/cli.ts approve send <approval-id>
+npx tsx src/cli.ts approve approve <approval-id>  # explicit Dad approval
+npx tsx src/cli.ts approve send <approval-id>     # execution only; never approves implicitly
 npx tsx src/cli.ts schedule list
 npx tsx src/cli.ts schedule daemon
 npx tsx src/cli.ts schedule install
@@ -122,6 +126,8 @@ Dashboard default: http://127.0.0.1:7337.
 ## Provider rules
 
 Codex uses the installed CLI in JSONL mode, ephemeral sessions, `danger-full-access`, and `approval_policy="never"`. It is intentionally configured for local engineering execution. The application-level outbound gate is separate and must remain enforced even if a provider has unrestricted local access.
+
+Read-only specialist work never falls back to Claude's full-permission mode. Provider subprocesses receive an explicit environment allowlist, not the complete parent environment.
 
 Claude is invoked only when Codex fails or the user explicitly selects it. Keep provider-specific flags inside `src/providers/runner.ts`.
 
@@ -149,6 +155,8 @@ The workflow is intentionally adapted from Junior’s review agent:
 6. Surface/readability.
 
 Read the full diff. On re-review, inspect existing GitHub comments/reviews and avoid duplicate findings. Findings need severity, title, body, file path, and positive changed-line number. The reviewer creates an approval item; it must not post to GitHub until Dad approves and executes it.
+
+The approval preview contains the complete rendered review and a content hash. Execution claims `approved -> executing` before calling Gmail/GitHub, revalidates the PR head SHA, and rejects stale or duplicate actions. The dashboard is loopback-only by default; remote mode requires an explicit token.
 
 ## Safe development workflow
 

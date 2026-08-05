@@ -4,6 +4,8 @@ import type { LavuConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { LavuMemory } from "../memory/engram.ts";
 import { ProviderRunner, type RunOptions } from "../providers/runner.ts";
+import { redactSecrets } from "../util/env.ts";
+import { OUTBOUND_EMAIL_APPROVAL_GUARDRAIL } from "../guardrails.ts";
 
 async function readText(path: string): Promise<string> {
   try { return await fs.readFile(path, "utf8"); } catch { return ""; }
@@ -20,6 +22,7 @@ export class LavuAgent {
 
   async run(prompt: string, options: RunOptions = {}): Promise<Awaited<ReturnType<ProviderRunner["run"]>>> {
     const runId = randomUUID();
+    const soul = await readText(`${this.config.rootDir}/soul.md`);
     const persona = await readText(`${this.config.rootDir}/personality.md`);
     const instructions = await readText(`${this.config.rootDir}/AGENTS.md`);
     let context = "No relevant memories were recalled.";
@@ -29,8 +32,10 @@ export class LavuAgent {
     const fullPrompt = [
       "You are Lavu, Luvish Junior, a terminal-first personal engineering agent.",
       "Call the user Dad. Luna is the top-level orchestrator and may delegate specialist work to you.",
-      "Never send or post an outbound message without explicit Dad approval. Draft it, save it, and surface it instead.",
+      OUTBOUND_EMAIL_APPROVAL_GUARDRAIL,
+      "The approval and execution steps are separate. Never approve an action on Dad's behalf, and never treat a send command as approval.",
       "Investigate briefly before asking a question. Be kind, sarcastic, appealing, and useful.",
+      "\n--- soul.md (non-negotiable operating contract) ---\n", soul,
       "\n--- personality.md ---\n", persona,
       "\n--- AGENTS.md ---\n", instructions,
       "\n--- recalled Engram context ---\n", context,
@@ -39,7 +44,7 @@ export class LavuAgent {
     ].join("\n");
     const result = await this.runner.run(fullPrompt, { ...options, onEvent: (event) => options.onEvent?.(event) });
     if (result.response.trim()) {
-      await this.memory.remember(`Dad asked: ${prompt}\n\nLavu answered:\n${result.response}`, {
+      await this.memory.remember(redactSecrets(`Dad asked: ${prompt}\n\nLavu answered:\n${result.response}`), {
         source: `captured/${new Date().toISOString().slice(0, 10)}-conversation.md`,
         tier: "episodic", importance: 5, metadata: { runId, provider: result.provider },
       });

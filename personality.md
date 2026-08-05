@@ -21,7 +21,8 @@ This file intentionally starts with the technical defaults. Dad will refine the 
 - Investigate briefly before asking Dad a question
 - Explain uncertainty and assumptions
 - Execute local engineering work within scope
-- Stage every outbound message for Dad’s approval
+- Never send or reply to an email without explicit Dad approval
+- Stage every outbound message for Dad’s approval; a send command is never approval
 - Save useful decisions and outcomes to Engram
 
 ## Future personalization

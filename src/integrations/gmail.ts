@@ -2,11 +2,14 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { createHash, randomBytes } from "node:crypto";
 import { google, type gmail_v1 } from "googleapis";
+import { CodeChallengeMethod } from "google-auth-library";
 import type { LavuConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ApprovalStore } from "../approval/store.ts";
 import type { ApprovalItem } from "../types.ts";
+import { assertOutboundExecutionClaim } from "../guardrails.ts";
 
 const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"];
 
@@ -78,7 +81,10 @@ export class GmailService {
     const credentials = JSON.parse(raw) as Record<string, Record<string, string>>;
     const config = credentials.installed || credentials.web || credentials;
     const client = new google.auth.OAuth2(config.client_id, config.client_secret, this.config.gmailRedirectUri);
-    const url = client.generateAuthUrl({ access_type: "offline", scope: SCOPES, prompt: "consent" });
+    const state = randomBytes(32).toString("hex");
+    const verifier = randomBytes(32).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const url = client.generateAuthUrl({ access_type: "offline", scope: SCOPES, prompt: "consent", state, code_challenge: challenge, code_challenge_method: CodeChallengeMethod.S256 });
     console.log(`\nOpen this Gmail authorization URL:\n\n${url}\n`);
     if (process.platform === "darwin") spawn("open", [url], { stdio: "ignore", detached: true }).unref();
     const redirect = new URL(this.config.gmailRedirectUri);
@@ -86,13 +92,16 @@ export class GmailService {
       const server = http.createServer(async (request, response) => {
         try {
           const incoming = new URL(request.url || "/", `${redirect.protocol}//${redirect.host}`);
+          if (incoming.pathname !== redirect.pathname) throw new Error("Unexpected Gmail OAuth callback path");
           const code = incoming.searchParams.get("code");
           const error = incoming.searchParams.get("error");
           if (error) throw new Error(error);
           if (!code) { response.writeHead(400); response.end("Waiting for OAuth callback"); return; }
-          const token = await client.getToken(code);
+          if (incoming.searchParams.get("state") !== state) throw new Error("Invalid Gmail OAuth state");
+          const token = await client.getToken({ code, codeVerifier: verifier });
           await fs.mkdir(path.dirname(this.config.gmailTokenPath), { recursive: true });
-          await fs.writeFile(this.config.gmailTokenPath, JSON.stringify(token.tokens, null, 2), "utf8");
+          await fs.chmod(path.dirname(this.config.gmailTokenPath), 0o700).catch(() => undefined);
+          await fs.writeFile(this.config.gmailTokenPath, JSON.stringify(token.tokens, null, 2), { encoding: "utf8", mode: 0o600 });
           response.end("Lavu is connected to Gmail. You can close this tab.");
           server.close(); resolve();
         } catch (callbackError) { response.writeHead(500); response.end(String(callbackError)); server.close(); reject(callbackError); }
@@ -131,7 +140,7 @@ export class GmailService {
 
   async sendApproved(item: ApprovalItem): Promise<string> {
     if (item.kind !== "gmail.send") throw new Error(`Not a Gmail approval: ${item.id}`);
-    if (item.status !== "approved") throw new Error(`Approval ${item.id} must be approved before sending`);
+    assertOutboundExecutionClaim(item);
     const gmail = await this.api();
     const payload = item.payload as { to: string; subject: string; body: string; threadId?: string };
     const raw = [`To: ${payload.to}`, `Subject: ${payload.subject}`, "Content-Type: text/plain; charset=utf-8", "", payload.body].join("\r\n");

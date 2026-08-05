@@ -18,15 +18,39 @@ test("approval store rejects transitions after an action has executed", async ()
     });
 
     await store.setStatus(item.id, "approved");
+    await store.setStatus(item.id, "executing");
     await store.setStatus(item.id, "executed", "message-123");
-    await assert.rejects(
-      () => store.setStatus(item.id, "rejected"),
-      /Invalid approval transition: executed -> rejected/,
-    );
+    await assert.rejects(() => store.setStatus(item.id, "rejected"), /Invalid approval transition: executed -> rejected/);
 
     const persisted = await store.get(item.id);
     assert.equal(persisted?.status, "executed");
     assert.equal(persisted?.result, "message-123");
+  } finally {
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("approval store cannot claim a pending action for outbound execution", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "lavu-approval-claim-"));
+
+  try {
+    const store = new ApprovalStore(path.join(rootDir, "approvals.json"));
+    await store.init();
+    const item = await store.create({
+      kind: "gmail.send",
+      title: "Pending email",
+      body: "Must not send",
+      payload: { to: "recipient@example.com" },
+    });
+
+    await assert.rejects(
+      () => store.claimForExecution(item.id),
+      /explicit Dad approval is required before execution/,
+    );
+    await store.setStatus(item.id, "approved");
+    const claimed = await store.claimForExecution(item.id);
+    assert.equal(claimed.status, "executing");
+    await assert.rejects(() => store.claimForExecution(item.id), /explicit Dad approval/);
   } finally {
     await fs.rm(rootDir, { recursive: true, force: true });
   }

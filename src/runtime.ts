@@ -44,9 +44,7 @@ export class LavuRuntime {
   }
 
   async executeApproval(id: string): Promise<string> {
-    const item = await this.approvals.get(id);
-    if (!item) throw new Error(`Approval item not found: ${id}`);
-    if (item.status !== "approved") throw new Error(`Approval ${id} is ${item.status}; approve it first`);
+    const item = await this.approvals.claimForExecution(id);
     try {
       const result = item.kind === "gmail.send" ? await this.gmail.sendApproved(item) : await this.reviewer.postApproved(item);
       await this.approvals.setStatus(id, "executed", result);

@@ -94,7 +94,17 @@ async function main(): Promise<void> {
       const sub = args[1] || "list";
       if (sub === "list") print(await runtime.approvals.list());
       else if (sub === "approve") { if (!args[2]) throw new Error("Usage: lavu approve approve <id>"); await runtime.approve(args[2]); console.log(`Approved ${args[2]}`); }
-      else if (sub === "send" || sub === "execute") { if (!args[2]) throw new Error("Usage: lavu approve send <id>"); const item = await runtime.approvals.get(args[2]); if (!item) throw new Error("Approval not found"); if (item.status === "pending") await runtime.approve(args[2]); print(await runtime.executeApproval(args[2])); }
+      else if (sub === "send" || sub === "execute") {
+        if (!args[2]) throw new Error("Usage: lavu approve send <id>");
+        const item = await runtime.approvals.get(args[2]);
+        if (!item) throw new Error("Approval not found");
+        if (item.status !== "approved") {
+          throw new Error(
+            `Sending is blocked: approval ${args[2]} is ${item.status}. Run 'lavu approve approve ${args[2]}' first; sending never approves implicitly.`,
+          );
+        }
+        print(await runtime.executeApproval(args[2]));
+      }
       else throw new Error("Usage: lavu approve list|approve|send <id>");
     } else if (command === "schedule") {
       const sub = args[1] || "list";
