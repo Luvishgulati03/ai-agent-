@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { LavuConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ProviderEvent, ProviderName, RunResult } from "../types.ts";
+import { safeEnvironment } from "../util/env.ts";
 
 export interface RunOptions {
   provider?: ProviderName;
@@ -44,7 +45,7 @@ async function execute(
   const stderrText: string[] = [];
   const child = spawn(command, args, {
     cwd,
-    env: { ...process.env, CI: "1", LAVU_RUN_ID: runId },
+    env: safeEnvironment(provider, { CI: "1", LAVU_RUN_ID: runId }),
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -87,7 +88,10 @@ export class ProviderRunner {
 
   async run(prompt: string, options: RunOptions = {}): Promise<RunResult> {
     const preferred = options.provider || this.config.provider;
-    const sequence: ProviderName[] = preferred === "codex" ? ["codex", "claude"] : ["claude", "codex"];
+    // Claude's installed CLI does not expose a verified read-only mode in the
+    // contract we use here. Never turn a read-only review into a write-capable
+    // fallback; Codex is the safe reviewer for this path.
+    const sequence: ProviderName[] = options.readOnly ? ["codex"] : preferred === "codex" ? ["codex", "claude"] : ["claude", "codex"];
     let last: RunResult | undefined;
 
     for (const provider of sequence) {

@@ -13,6 +13,8 @@ export interface LavuConfig {
   workflowsPath: string;
   host: string;
   port: number;
+  dashboardToken?: string;
+  allowRemoteDashboard: boolean;
   provider: "codex" | "claude";
   codexModel?: string;
   claudeModel?: string;
@@ -50,6 +52,8 @@ export function loadConfig(rootDir = defaultRoot): LavuConfig {
     workflowsPath: resolveFromRoot(rootDir, process.env.LAVU_WORKFLOWS_PATH, "workflows/defaults.json"),
     host: process.env.LAVU_HOST || "127.0.0.1",
     port: Number(process.env.LAVU_PORT || 7337),
+    dashboardToken: process.env.LAVU_DASHBOARD_TOKEN || undefined,
+    allowRemoteDashboard: bool(process.env.LAVU_ALLOW_REMOTE_DASHBOARD, false),
     provider: process.env.LAVU_PROVIDER === "claude" ? "claude" : "codex",
     codexModel: process.env.LAVU_CODEX_MODEL || undefined,
     claudeModel: process.env.LAVU_CLAUDE_MODEL || undefined,

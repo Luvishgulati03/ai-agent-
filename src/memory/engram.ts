@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { Engram } from "engram-memory";
 import type { GraphExport, RecallResult } from "engram-memory";
@@ -9,14 +10,19 @@ export class LavuMemory {
   readonly engine: Engram;
 
   constructor(private readonly config: LavuConfig, private readonly activity: ActivityLog) {
+    mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
     this.engine = new Engram({ dbPath: config.dbPath, defaultK: 8 });
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.config.memoryDir, { recursive: true });
-    await fs.mkdir(this.config.capturedMemoryDir, { recursive: true });
-    await fs.mkdir(this.config.dataDir, { recursive: true });
+    await fs.mkdir(this.config.memoryDir, { recursive: true, mode: 0o700 });
+    await fs.mkdir(this.config.capturedMemoryDir, { recursive: true, mode: 0o700 });
+    await fs.mkdir(this.config.dataDir, { recursive: true, mode: 0o700 });
+    await fs.chmod(this.config.dataDir, 0o700).catch(() => undefined);
     await this.engine.indexDirectory(this.config.memoryDir, { incremental: true });
+    await fs.chmod(this.config.dbPath, 0o600).catch(() => undefined);
+    await fs.chmod(`${this.config.dbPath}-wal`, 0o600).catch(() => undefined);
+    await fs.chmod(`${this.config.dbPath}-shm`, 0o600).catch(() => undefined);
   }
 
   async recall(query: string, k = 8): Promise<RecallResult[]> {

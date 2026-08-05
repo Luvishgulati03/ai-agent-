@@ -9,7 +9,10 @@ function json(response: http.ServerResponse, status: number, value: unknown): vo
 
 async function body(request: http.IncomingMessage): Promise<Record<string, unknown>> {
   let raw = "";
-  for await (const chunk of request) raw += chunk;
+  for await (const chunk of request) {
+    raw += chunk;
+    if (raw.length > 256_000) throw new Error("request body too large");
+  }
   try { return JSON.parse(raw || "{}") as Record<string, unknown>; } catch { throw new Error("Invalid JSON body"); }
 }
 
@@ -18,9 +21,23 @@ function localOrigin(request: http.IncomingMessage): boolean {
   return !origin || /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(origin);
 }
 
+function loopback(host: string): boolean { return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]"; }
+
+function authorized(request: http.IncomingMessage, runtime: LavuRuntime): boolean {
+  if (loopback(runtime.config.host)) return true;
+  if (!runtime.config.allowRemoteDashboard || !runtime.config.dashboardToken) return false;
+  const authorization = request.headers.authorization || "";
+  return authorization === `Bearer ${runtime.config.dashboardToken}` || request.headers["x-lavu-token"] === runtime.config.dashboardToken;
+}
+
 export function startDashboard(runtime: LavuRuntime): http.Server {
+  if (!loopback(runtime.config.host) && (!runtime.config.allowRemoteDashboard || !runtime.config.dashboardToken)) {
+    throw new Error("Remote dashboard is disabled; bind LAVU_HOST to loopback or configure LAVU_ALLOW_REMOTE_DASHBOARD=true with LAVU_DASHBOARD_TOKEN");
+  }
   const server = http.createServer(async (request, response) => {
     try {
+      if (!loopback(runtime.config.host) && !runtime.config.allowRemoteDashboard) throw new Error("Remote dashboard is disabled; bind LAVU_HOST to loopback or explicitly enable a token-protected remote dashboard");
+      if (!authorized(request, runtime)) { json(response, 401, { error: "dashboard authentication required" }); return; }
       const url = new URL(request.url || "/", `http://${runtime.config.host}:${runtime.config.port}`);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" }); response.end(DASHBOARD_HTML); return;

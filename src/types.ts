@@ -49,7 +49,7 @@ export interface ApprovalItem {
   createdAt: string;
   updatedAt: string;
   kind: "gmail.send" | "github.review" | "message.send";
-  status: "pending" | "approved" | "executed" | "rejected" | "failed";
+  status: "pending" | "approved" | "executing" | "executed" | "rejected" | "failed";
   title: string;
   recipient?: string;
   subject?: string;
@@ -88,4 +88,5 @@ export interface ReviewReport {
   generatedAt: string;
   provider: ProviderName;
   approvalId?: string;
+  headSha?: string;
 }

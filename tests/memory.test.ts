@@ -1,0 +1,31 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { ActivityLog } from "../src/activity.ts";
+import { LavuMemory } from "../src/memory/engram.ts";
+import type { LavuConfig } from "../src/config.ts";
+
+function config(rootDir: string): LavuConfig {
+  return {
+    rootDir, dataDir: path.join(rootDir, "data"), memoryDir: path.join(rootDir, "memory"), capturedMemoryDir: path.join(rootDir, "memory/captured"),
+    dbPath: path.join(rootDir, "data/engram.db"), activityPath: path.join(rootDir, "data/activity.jsonl"), approvalsPath: path.join(rootDir, "data/approvals.json"), workflowsPath: path.join(rootDir, "workflows.json"),
+    host: "127.0.0.1", port: 0, dashboardToken: undefined, allowRemoteDashboard: false, provider: "codex", requireOutboundApproval: true, gmailCredentialsPath: path.join(rootDir, "credentials.json"), gmailTokenPath: path.join(rootDir, "token.json"), gmailRedirectUri: "http://127.0.0.1:43821/oauth2callback",
+  };
+}
+
+test("Engram memory survives index and recalls a durable decision", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lavu-memory-"));
+  const cfg = config(root);
+  const activity = new ActivityLog(cfg.activityPath);
+  await activity.init();
+  const memory = new LavuMemory(cfg, activity);
+  await memory.init();
+  const id = await memory.remember("The canary deploy must finish before the database migration is promoted.", { tier: "procedural", importance: 9 });
+  const hits = await memory.recall("what must happen before promoting the database migration?");
+  assert.ok(hits.some((hit) => hit.id === id || hit.content.includes("canary deploy")));
+  assert.ok(hits[0]?.why);
+  await memory.index();
+  memory.close();
+});

@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
+import { safeEnvironment } from "./env.ts";
 
 export interface CommandResult { stdout: string; stderr: string; exitCode: number | null; }
 
 export function runCommand(command: string, args: string[], cwd: string, input?: string): Promise<CommandResult> {
-  const child = spawn(command, args, { cwd, env: { ...process.env, CI: "1" }, stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(command, args, { cwd, env: safeEnvironment(undefined, { CI: "1" }), stdio: ["pipe", "pipe", "pipe"] });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf8");
