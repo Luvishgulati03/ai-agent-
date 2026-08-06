@@ -20,5 +20,12 @@
     "kind": "knowledge.distill",
     "enabled": true,
     "batchLimit": 25
+  },
+  {
+    "id": "job-mail-watch",
+    "name": "Job-application inbox watch",
+    "cron": "*/45 * * * *",
+    "kind": "mail.watch",
+    "enabled": true
   }
 ]

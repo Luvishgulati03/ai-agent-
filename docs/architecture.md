@@ -215,3 +215,5 @@ build it from scratch:
 - [`docs/modules/mcp-tools.md`](modules/mcp-tools.md) — zero-code
   capabilities via the provider CLIs' own MCP support, and why
   outbound-capable MCP tools bypass the approval gate above.
+- [`docs/modules/telegram.md`](modules/telegram.md) — fire-and-forget
+  Telegram delivery layered on top of the console/macOS-notification path.

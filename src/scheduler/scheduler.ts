@@ -74,6 +74,7 @@ export class WorkflowScheduler {
       if (definition.kind === "memory.dream") result = await this.memory.dream();
       else if (definition.kind === "gmail.inbox") result = await this.gmail.inbox(20);
       else if (definition.kind === "knowledge.distill") result = await this.runKnowledgeDistill(definition);
+      else if (definition.kind === "mail.watch") result = await this.runMailWatch();
       else result = { skipped: true, reason: "agent.prompt workflows require an orchestrator callback" };
       await this.activity.record("workflow.completed", `Workflow ${definition.id} completed`, { result });
       return result;
@@ -111,6 +112,31 @@ export class WorkflowScheduler {
       } finally {
         kb.close();
       }
+    } finally {
+      await fs.rm(lockPath, { force: true });
+    }
+  }
+
+  /**
+   * Job-application inbox watch. Lazy-constructed per run, same shape as
+   * `runKnowledgeDistill`. The alert-dedupe store makes overlapping runs harmless on its
+   * own, but a pid lock (`data/mailwatch.lock`) still guards against two runs racing the
+   * same `data/mailwatch.json` write.
+   */
+  private async runMailWatch(): Promise<unknown> {
+    const lockPath = path.join(this.config.dataDir, "mailwatch.lock");
+    const heldPid = await readLockPid(lockPath);
+    if (heldPid !== undefined && isPidAlive(heldPid)) {
+      return { skipped: true, reason: "mail.watch already running", pid: heldPid };
+    }
+    await fs.mkdir(this.config.dataDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(lockPath, String(process.pid), { encoding: "utf8", mode: 0o600 });
+    try {
+      const { MailWatchService } = await import("../mailwatch/service.ts");
+      const { ProviderRunner } = await import("../providers/runner.ts");
+      const runner = new ProviderRunner(this.config, this.activity);
+      const service = new MailWatchService(this.config, this.activity, runner, this.notifyReminderFn);
+      return await service.check();
     } finally {
       await fs.rm(lockPath, { force: true });
     }

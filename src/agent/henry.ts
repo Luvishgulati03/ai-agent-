@@ -57,6 +57,7 @@ export class HenryAgent {
       "- knowledge (founder playbooks): `npx tsx src/cli.ts knowledge search|context \"<query>\"`; memory: `npx tsx src/cli.ts memory search|remember`.",
       "- goals: `npx tsx src/cli.ts goal \"<goal>\"`; linkedin drafts: `npx tsx src/cli.ts linkedin <topic>`; screenshots: `npx tsx src/cli.ts screenshots backlog`.",
       "- jobs: `npx tsx src/cli.ts jobs inspect|prepare <url>`. Anything outbound still lands in the approval queue, never sent directly.",
+      "- job-mail watching: runs automatically every 45min via the scheduler daemon (`mail.watch` in workflows/defaults.json) — it reads Gmail read-only and notifies (console/osascript/Telegram) on shortlisting, interview, assessment, or offer emails. Manual run: `npx tsx src/cli.ts mailwatch check`; last-check time: `npx tsx src/cli.ts mailwatch status`.",
       "- gmail (via your own MCP tools when running on codex): you can READ inbox/threads and summarize/triage directly in conversation, and you may create DRAFTS. HARD RULE: NEVER send, reply, forward, or modify labels/read-state via MCP gmail tools — sending goes ONLY through the approval queue (npx tsx src/cli.ts gmail draft ... then Dad approves). If asked to send, stage it and say so.",
       "\n--- soul.md (non-negotiable operating contract) ---\n", soul,
       "\n--- personality.md ---\n", persona,

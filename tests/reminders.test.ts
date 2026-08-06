@@ -11,6 +11,7 @@ import {
   parseIn,
   nextCronFireAt,
   REMINDER_OVERDUE_GRACE_MS,
+  PROMPT_NO_NOTIFICATION,
   type ReminderNotifier,
   type PromptRunner,
   type ExecuteApprovalFn,
@@ -289,6 +290,24 @@ test("fireDue() supports recurring prompt jobs: re-arms and re-runs the prompt o
   assert.equal(fired[0].kind, "prompt");
   assert.deepEqual(prompts, ["wish Dad good morning with one useful thing from memory"]);
   assert.deepEqual(messages, ["Good morning! Here's a tip."]);
+});
+
+test("fireDue() suppresses the prompt no-notification sentinel while advancing the job", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  const reminder = await service.createRecurring("check for new job emails", "*/15 * * * *", "prompt", now);
+
+  const { notify, messages } = fakeNotifier();
+  const { run } = fakePromptRunner(PROMPT_NO_NOTIFICATION);
+  const fired = await service.fireDue(notify, new Date(reminder.dueAt), run);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "pending");
+  assert.deepEqual(messages, []);
+  const events = await activity.list(10);
+  const event = events.find((item) => item.metadata?.id === reminder.id);
+  assert.equal(event?.metadata?.notified, false);
 });
 
 test("fireDue() falls back to a placeholder when a prompt reminder fires with no PromptRunner configured", async () => {

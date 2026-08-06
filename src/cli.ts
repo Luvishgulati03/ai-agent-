@@ -8,6 +8,7 @@ import { startDashboard } from "./dashboard/server.ts";
 import { writeCronFile, writeLaunchdPlist } from "./scheduler/install.ts";
 import { parseAt, parseIn, type ReminderKind } from "./reminders/service.ts";
 import { startReminderTicker, type ReminderTickerHandle } from "./reminders/ticker.ts";
+import { sendTelegram } from "./notify/telegram.ts";
 
 const args = process.argv.slice(2);
 
@@ -82,6 +83,7 @@ async function main(): Promise<void> {
       startDashboard(runtime); keepAlive = true;
       startReminderTicker(runtime.reminders, runtime.activity, {
         role: "dashboard",
+        notify: runtime.notifyOperator,
         promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
         executeApproval: (approvalId) => runtime.executeApproval(approvalId),
       });
@@ -305,13 +307,24 @@ async function main(): Promise<void> {
           print({ id: reminder.id, text: reminder.text, kind: reminder.kind, dueAt: reminder.dueAt, cron: reminder.cron, nextFireAt: reminder.nextFireAt, status: reminder.status });
         }
       }
+    } else if (command === "telegram") {
+      const sub = args[1] || "test";
+      if (sub === "test") {
+        const ok = await sendTelegram(runtime.config, "Henry → Telegram is live 🎉");
+        console.log(ok ? "ok — check your Telegram chat" : "fail — check HENRY_TELEGRAM_BOT_TOKEN / HENRY_TELEGRAM_CHAT_ID in .env, then see docs/modules/telegram.md");
+      } else throw new Error("Usage: henry telegram test");
+    } else if (command === "mailwatch") {
+      const sub = args[1] || "check";
+      if (sub === "check") print(await runtime.mailwatch.check());
+      else if (sub === "status") print(await runtime.mailwatch.status());
+      else throw new Error("Usage: henry mailwatch check|status");
     } else if (command === "linkedin") {
       const topic = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
       if (!topic) throw new Error("Usage: henry linkedin <topic...>");
       const result = await runtime.linkedin.draft(topic);
       console.log(result.draft);
       console.log(`\nDraft saved — review and post manually: ${result.markdownPath}`);
-    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, linkedin");
+    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, telegram, mailwatch, linkedin");
   } finally {
     if (!keepAlive) runtime.close();
   }

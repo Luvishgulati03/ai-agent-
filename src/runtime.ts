@@ -18,8 +18,10 @@ import { ScreenshotSorterService } from "./screenshots/service.ts";
 import { ResumeEditorService } from "./jobs/resume-editor.ts";
 import { WorkflowEngine } from "./workflows/engine.ts";
 import { GoalService } from "./goals/service.ts";
-import { ReminderService } from "./reminders/service.ts";
+import { ReminderService, notifyReminder, type ReminderNotifier } from "./reminders/service.ts";
 import { LinkedInDraftService } from "./social/linkedin.ts";
+import { sendTelegram } from "./notify/telegram.ts";
+import { MailWatchService } from "./mailwatch/service.ts";
 import type { ProviderName, RunResult } from "./types.ts";
 
 export class HenryRuntime {
@@ -39,8 +41,20 @@ export class HenryRuntime {
   readonly goals: GoalService;
   readonly reminders: ReminderService;
   readonly linkedin: LinkedInDraftService;
+  readonly mailwatch: MailWatchService;
   private _knowledge?: KnowledgeBase;
   private _workflowEngine?: WorkflowEngine;
+
+  /**
+   * Composed operator-notification channel: console + osascript (via `notifyReminder`) then
+   * a fire-and-forget Telegram send when configured. This is the one place reminders and
+   * mail-watch alerts are wired together with Telegram — neither module imports the other or
+   * imports `notify/telegram.ts` itself (doctrine rule 7); the runtime composition root does.
+   */
+  readonly notifyOperator: ReminderNotifier = async (message, title) => {
+    await notifyReminder(message, title);
+    void sendTelegram(this.config, title && title !== "Henry" ? `${title}: ${message}` : message).catch(() => undefined);
+  };
 
   private constructor(readonly config: HenryConfig) {
     this.activity = new ActivityLog(config.activityPath);
@@ -52,10 +66,11 @@ export class HenryRuntime {
     this.reminders = new ReminderService(config, this.activity);
     this.scheduler = new WorkflowScheduler(
       config, this.activity, this.memory, this.gmail, this.reminders,
-      undefined,
+      this.notifyOperator,
       (prompt) => this.agent.run(prompt).then((result) => result.response),
       (approvalId) => this.executeApproval(approvalId),
     );
+    this.mailwatch = new MailWatchService(config, this.activity, this.agent.providerRunner, this.notifyOperator);
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);

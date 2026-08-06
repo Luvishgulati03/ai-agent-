@@ -45,6 +45,10 @@ export interface HenryConfig {
   goalsDir: string;
   remindersPath: string;
   socialDir: string;
+  /** Operator-notification channel only (never a general send-to-anyone surface). */
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  mailwatchPath: string;
 }
 
 const thisFile = fileURLToPath(import.meta.url);
@@ -120,5 +124,8 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     goalsDir: path.join(dataDir, "goals"),
     remindersPath: path.join(dataDir, "reminders.json"),
     socialDir: path.join(dataDir, "social"),
+    telegramBotToken: env("TELEGRAM_BOT_TOKEN") || undefined,
+    telegramChatId: env("TELEGRAM_CHAT_ID") || undefined,
+    mailwatchPath: path.join(dataDir, "mailwatch.json"),
   };
 }

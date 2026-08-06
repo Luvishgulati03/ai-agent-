@@ -49,6 +49,9 @@ export type ReminderNotifier = (message: string, title?: string) => Promise<void
 /** Runs a reminder's prompt through the agent (t1) and returns the response text; injected so the reminder service stays agent-agnostic. */
 export type PromptRunner = (prompt: string) => Promise<string>;
 
+/** Prompt jobs may return this exact sentinel when a check has nothing to notify. */
+export const PROMPT_NO_NOTIFICATION = "NO_MATCH";
+
 /**
  * Executes an already-approved outbound action by id (gmail send, job submission, PR comment —
  * whatever `HenryRuntime.executeApproval` dispatches to). Injected so the reminder service never
@@ -304,13 +307,15 @@ export class ReminderService {
         }
         body = approvalError ? `Scheduled send skipped: ${approvalError}` : `Sent scheduled approval ${reminder.text}`;
       }
+      const silentPrompt = reminder.kind === "prompt" && body.trim() === PROMPT_NO_NOTIFICATION;
       const message = overdue ? `(overdue) ${body}` : body;
-      await notify(message);
+      if (!silentPrompt) await notify(message);
       // approval.execute reminders are always one-shot (createApprovalExecute never sets cron) —
       // this still routes through the same fire-once path as any other one-shot reminder.
       const updated = reminder.cron ? await this.rearm(reminder.id, now) : await this.markFired(reminder.id, now);
       await this.activity.record("workflow.completed", `Reminder fired: ${reminder.text}`, {
         reminder: true, id: reminder.id, overdue, kind: reminder.kind, recurring: Boolean(reminder.cron), message,
+        notified: !silentPrompt,
         ...(reminder.kind === "approval.execute" ? { approvalId: reminder.approvalId, error: approvalError } : {}),
       });
       fired.push(updated);
