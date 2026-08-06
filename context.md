@@ -8,7 +8,52 @@ This file is the durable handoff for any other agentic IDE, model, or engineer w
 
 The complete architecture & roadmap plan (memory flagship, dev workflows, E2E stacks, capability roadmap, M1 resource policy, dashboard spec, open-source plan, build phases) is in **`docs/MASTER_PLAN.md`** (2026-08-06). Read it before starting any new phase; it supersedes the "next recommended phases" list at the bottom of this file.
 
-## Latest handoff — 2026-08-06 (evening) — knowledge base LIVE, repo moved off iCloud
+## Latest handoff — 2026-08-06 (night) — full build day complete, 33 commits pushed
+
+All work is committed AND pushed to `personal` = `github.com/Luvishgulati03/ai-agent-` (33 commits on main). Working copy: `~/dev/henry`. Suite: 111/111 tests, tsc clean, build emits.
+
+### Everything implemented today (chronological)
+
+1. **Rename Lavu→Henry** everywhere; `HENRY_*` env with `LAVU_*` fallback.
+2. **Jobs pipeline wired end-to-end** + tailored-resume PDFs (Playwright Chromium renderer, zero new deps).
+3. **Cover letters**: `henry cover <url|jd>` — re-reads `resume.md` EVERY call (hard requirement), personality+memory voice, md+PDF out. `henry cover import <docx>` via textutil.
+4. **Resume editing**: `henry resume edit "<instructions>"` → new PDF in data/resumes; `promote` accepts a draft as the new master; never invents facts, never silently overwrites. Dad's real resume (PM-focused PDF version) is `resume.md`; career profile + "Dad intends to be a PRODUCT MANAGER" stored in memory (importance 9, memory/career-profile.md).
+5. **Provider toggle** (dashboard + CLI + persisted settings), **`henry code`** codebase tasks, **`henry goal`** intake (decompose→tiered plan, never auto-executes), **`henry linkedin <topic>`** voice drafts, **screenshot sorter** (vision classify→taxonomy folders), **meeting shadow** (whisper.cpp→structured+personalized notes→docx; needs `brew install whisper-cpp`).
+6. **GrowthX knowledge base (flagship)**: read-only Mongo export (gx-prod-database; DB_STRING from gx-backend .env at runtime, never stored; member notes excluded) → 5,048 LX-RAG pre-chunked learningchunks + 305 transcripts + 600 texts → local bge-small embeddings (transformers.js, $0) → data/knowledge.db (18.7k clean entries). Two-layer RAG: raw chunks + distilled strategy cards. LX-RAG lessons applied: domain=soft boost not hard filter, minScore floor 0.02, ≤2 chunks/module, context-prefixed embeddings. **463+ strategy cards** from 44+ modules; ~1,083 modules remain → nightly cron (2 AM, 25/night, 3× parallel promise-pool, checkpointed, failures retry).
+7. **Knowledge injection**: zero-LLM domain router (src/knowledge/router.ts) auto-attaches founder playbooks to GTM/PM/eng turns; never fires on chit-chat.
+8. **Memory upgrade**: personal memory swapped hashing→bge-small local embeddings (shared provider src/embeddings.ts, marker-guarded migration, `memory index --fresh` run). Semantic recall proven (zero-word-overlap query hit).
+9. **Luna resource manager**: admission control (max 2 subprocesses/1 heavy, memory_pressure refusal <5% free, FIFO queue), T0/T1/T2 tier routing (haiku/mini ↔ default ↔ opus/high-effort), 5-min timeout envelopes with partial results. Byte-identical behavior when untiered.
+10. **Markdown workflow engine** (Junior's format): frontmatter *.workflow.md, hot reload + last-known-good, runtime-context JSON injection, path-traversal-safe artifacts, croner scheduling, `henry workflow list|show|run|logs`. Live workflows: worklog (18:30 IST), memory-consolidation (nightly), release-notes + worktree-prune (installed, disabled pending repo config), knowledge-distill-nightly (2 AM, pid-locked).
+11. **Cron-job module (buildathon design)**: reminders upgraded — `--every` recurring (croner), `--prompt` jobs (Henry composes the message at fire time), `--execute-approval` scheduled sends (ONLY executes pre-approved items; failure→"skipped" notification, never retry-sends). Ticker auto-starts inside repl AND dashboard (no second terminal). Live-fire verified twice.
+12. **Realtime dashboard**: SSE stream (hello+first sample instant), heartbeat pulse, RAM budget bar vs 5GB, memory-pressure badge, per-process meters, sparkline, independent per-panel loading, **neural-link memory graph** (canvas force-directed, glowing tier-colored orbs, edge pulses, hover tooltips, 300-node cap).
+13. **REPL**: "henry is thinking..." indicator; **agent self-capabilities prompt** — Henry knows his own CLI (remind/cover/resume/knowledge/goal/linkedin/jobs/screenshots) and EXECUTES commands instead of describing them (proven: he scheduled Dad's 10:15 PM reminder himself).
+14. **Skills harvest**: vendor/ (gitignored — gx-* content is GrowthX IP, never pushed) holds full .claude/.agent/.maestro from gx-client-expo (13 skills, 6 agents, 21 Maestro flows), gx-backend (10 agents, 82 docs), gx-community/next, Friday (agents/hooks/runbooks), Junior (5 workflows, 17 agent defs), buildathon modules. Curated install → .claude/agents/ (clean-code, code-architect, tdd, perf-auditor, Friday review, Junior build+frontend — generalized).
+15. **Buildathon handbook doctrine**: read every inch (Dad pasted full HTML; also local module sources). Henry audits 12/12 after closing gaps: docs/module-doctrine.md (the 12 rules, committed law) + docs/modules/*.md (9 handbook-style per-module install guides, line-verified against code) + MCP zero-code path documented (mcp-tools.md; caveat: MCP rides provider session, bypasses approval gate → outbound stays in gated modules).
+16. **Open-source pack**: soul/personality example templates, design-your-soul guide, BOOTSTRAP.md fork prompt, public docs/architecture.md — all scrubbed (0 personal-detail hits).
+
+### Issues hit today and their solutions (debug journal)
+
+- **"Typecheck hangs"** → NOT a compiler issue: iCloud evicts files on the ~10GB-free disk; reads block forever (caught tsc stuck in a read() syscall on a dataless googleapis file via `sample` + lsof). FIX: moved repo to `~/dev/henry` (outside iCloud). Diagnose recurrence: `find node_modules -flags dataless`.
+- **Mongo/module imports freezing** → same iCloud disease (even `import('mongodb')` froze). Same fix.
+- **Distillation produced 0 cards** → Codex CLI wasn't installed; read-only runs are Codex-only by design (no silent Claude fallback). FIX: `npm i -g @openai/codex` + Dad's login; checkpoint system meant zero data loss.
+- **Card titles were Mongo IDs** → learningchunks lack module_name. FIX: join modules.json catalog at ingest; re-distilled affected modules (39 stale ID-named card entries remain in DB as low-harm noise — future cleanup).
+- **GTM search returned 0 results** → two calibration bugs: minScore default (0.05) above Engram's fused-score scale (~0.03-0.04), and domain hard-filter excluded community-tagged launch content. FIX: 0.02 floor + domain-as-boost (LX-RAG's own lesson).
+- **Editor-JSON polluted embeddings** ("type":"text" fragments) → texts exported raw Quill/Lexical. FIX: richTextToPlain() flattener; full re-export + clean rebuild (30k noisy → 18.7k clean entries).
+- **REPL "stops responding"** → it was answering; Codex runs take ~50s with zero feedback. FIX: thinking indicator. Deeper: Henry didn't know his own CLI → self-capabilities block.
+- **Scheduled messages "not sent" (twice)** → (1) all running processes predated the ticker code by minutes (restart timing); stale dashboard also squatted port 7337 serving the old page → killed all, restarted fresh; overdue catch-up then fired everything. (2) Delivery displays via osascript banners which macOS can silently suppress (Script Editor notification permission / nighttime Focus) — firing was log-verified correct both times; the banner is the fragile link. Dad should check System Settings→Notifications→Script Editor + Focus mode. Louder channels (Slack/Telegram/self-email) are the roadmap fix.
+- **Dashboard "dead"/stuck connecting** → page awaited Promise.all over 7 endpoints; /api/knowledge cold-loaded stats synchronously (~300-400ms better-sqlite3 event-loop freeze; model load NOT the culprit — LocalEmbeddingProvider is lazy). FIX: independent per-panel loading + background stats init with {loading:true} first response + SSE immediate first sample. Verified: status 2-3ms, knowledge first-hit 1.4ms.
+- **Vision classification would silently run on Codex** (readOnly forces codex, ignoring provider:"claude") → FIX: explicit caller provider choice honored as single-provider run, still no silent fallback.
+- **Concurrent agents editing config.ts/cli.ts** → managed by dispatch sequencing (shared-file owners run serially; disjoint files parallel); one gitignore overreach (`knowledge/` matched `src/knowledge/`) fixed with `/knowledge/` root anchor.
+
+### Environment facts
+
+- Codex CLI 0.146.1 installed + authed (ChatGPT sub). gh CLI authed as Luvishgulati03 (personal); work account logged out. gh credential helper wired. Playwright + transformers.js + mongodb deps in. Dashboard: http://127.0.0.1:7337. Whisper NOT yet installed (meetings blocked on `brew install whisper-cpp`). Gmail OAuth NOT yet connected (henry gmail auth pending Dad's Google Cloud credentials). Disk still ~10GB free — cleanup recommended.
+
+### Next up (per MASTER_PLAN phases + Dad's queue)
+
+Launch crew workflow (§6.3) · E2E stacks (Playwright Agents web, Maestro mobile — vendor/ has the reference flows) · X messaging + style pipeline (Dad must request X archive + API signup) · interview-prep loop · image generation · Slack/Telegram delivery channel for reminders · memory v2 (extraction, arbitration/supersede, profile.md dream rewrite) · fix agent self-capabilities to include meetings/screenshots watch · clean 39 stale ID-named cards.
+
+## Previous handoff — 2026-08-06 (evening) — knowledge base LIVE, repo moved off iCloud
 
 **THE CANONICAL WORKING COPY IS NOW `~/dev/henry`** (this file's home). The old Desktop copy (`.../junior's repo/luvish jr`) hit fatal iCloud-eviction read hangs (~10GB free disk → aggressive eviction; even module imports froze) and is STALE — do not build there. Dad should open future sessions in `~/dev/henry`.
 
