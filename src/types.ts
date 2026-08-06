@@ -14,7 +14,15 @@ export type ActivityKind =
   | "workflow.completed"
   | "workflow.failed"
   | "gmail.read"
-  | "pr.reviewed";
+  | "pr.reviewed"
+  | "job.discovered"
+  | "job.prepared"
+  | "job.filled"
+  | "job.submitted"
+  | "resume.generated"
+  | "provider.switched"
+  | "task.started"
+  | "task.completed";
 
 export interface ActivityEvent {
   id: string;
@@ -48,7 +56,7 @@ export interface ApprovalItem {
   id: string;
   createdAt: string;
   updatedAt: string;
-  kind: "gmail.send" | "github.review" | "message.send";
+  kind: "gmail.send" | "github.review" | "message.send" | "job.application";
   status: "pending" | "approved" | "executing" | "executed" | "rejected" | "failed";
   title: string;
   recipient?: string;

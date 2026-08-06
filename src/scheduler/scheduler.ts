@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import { Cron } from "croner";
-import type { LavuConfig } from "../config.ts";
+import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
-import type { LavuMemory } from "../memory/engram.ts";
+import type { HenryMemory } from "../memory/engram.ts";
 import type { GmailService } from "../integrations/gmail.ts";
 import type { WorkflowDefinition } from "../types.ts";
 
@@ -10,9 +10,9 @@ export class WorkflowScheduler {
   private jobs: Array<{ definition: WorkflowDefinition; cron: Cron }> = [];
 
   constructor(
-    private readonly config: LavuConfig,
+    private readonly config: HenryConfig,
     private readonly activity: ActivityLog,
-    private readonly memory: LavuMemory,
+    private readonly memory: HenryMemory,
     private readonly gmail: GmailService,
   ) {}
 

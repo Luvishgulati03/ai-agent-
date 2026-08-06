@@ -5,7 +5,7 @@ import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { google, type gmail_v1 } from "googleapis";
 import { CodeChallengeMethod } from "google-auth-library";
-import type { LavuConfig } from "../config.ts";
+import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ApprovalStore } from "../approval/store.ts";
 import type { ApprovalItem } from "../types.ts";
@@ -51,7 +51,7 @@ export class GmailService {
   private client?: gmail_v1.Gmail;
 
   constructor(
-    private readonly config: LavuConfig,
+    private readonly config: HenryConfig,
     private readonly activity: ActivityLog,
     private readonly approvals: ApprovalStore,
   ) {}
@@ -59,12 +59,12 @@ export class GmailService {
   private async oauth(): Promise<import("googleapis").Auth.OAuth2Client> {
     let raw: string;
     try { raw = await fs.readFile(this.config.gmailCredentialsPath, "utf8"); }
-    catch { throw new Error(`Gmail credentials missing at ${this.config.gmailCredentialsPath}. Run: lavu gmail auth`); }
+    catch { throw new Error(`Gmail credentials missing at ${this.config.gmailCredentialsPath}. Run: henry gmail auth`); }
     const credentials = JSON.parse(raw) as Record<string, Record<string, string>>;
     const config = credentials.installed || credentials.web || credentials;
     const client = new google.auth.OAuth2(config.client_id, config.client_secret, this.config.gmailRedirectUri);
     try { await fs.access(this.config.gmailTokenPath); client.setCredentials(JSON.parse(await fs.readFile(this.config.gmailTokenPath, "utf8"))); }
-    catch { throw new Error(`Gmail is not connected. Run: lavu gmail auth`); }
+    catch { throw new Error(`Gmail is not connected. Run: henry gmail auth`); }
     return client;
   }
 
@@ -102,7 +102,7 @@ export class GmailService {
           await fs.mkdir(path.dirname(this.config.gmailTokenPath), { recursive: true });
           await fs.chmod(path.dirname(this.config.gmailTokenPath), 0o700).catch(() => undefined);
           await fs.writeFile(this.config.gmailTokenPath, JSON.stringify(token.tokens, null, 2), { encoding: "utf8", mode: 0o600 });
-          response.end("Lavu is connected to Gmail. You can close this tab.");
+          response.end("Henry is connected to Gmail. You can close this tab.");
           server.close(); resolve();
         } catch (callbackError) { response.writeHead(500); response.end(String(callbackError)); server.close(); reject(callbackError); }
       });

@@ -1,41 +1,82 @@
-import type { LavuConfig } from "./config.ts";
+import fs from "node:fs/promises";
+import path from "node:path";
+import type { HenryConfig } from "./config.ts";
 import { loadConfig } from "./config.ts";
 import { ActivityLog } from "./activity.ts";
 import { ApprovalStore } from "./approval/store.ts";
-import { LavuMemory } from "./memory/engram.ts";
-import { LavuAgent } from "./agent/lavu.ts";
+import { HenryMemory } from "./memory/engram.ts";
+import { HenryAgent } from "./agent/henry.ts";
 import { LunaOrchestrator } from "./orchestration/luna.ts";
 import { GmailService } from "./integrations/gmail.ts";
 import { WorkflowScheduler } from "./scheduler/scheduler.ts";
 import { PullRequestReviewer } from "./pr/review.ts";
+import { JobApplicationService } from "./jobs/service.ts";
+import { CoverLetterService } from "./jobs/cover.ts";
+import type { ProviderName, RunResult } from "./types.ts";
 
-export class LavuRuntime {
+export class HenryRuntime {
   readonly activity: ActivityLog;
   readonly approvals: ApprovalStore;
-  readonly memory: LavuMemory;
-  readonly agent: LavuAgent;
+  readonly memory: HenryMemory;
+  readonly agent: HenryAgent;
   readonly luna: LunaOrchestrator;
   readonly gmail: GmailService;
   readonly scheduler: WorkflowScheduler;
   readonly reviewer: PullRequestReviewer;
+  readonly jobs: JobApplicationService;
+  readonly cover: CoverLetterService;
 
-  private constructor(readonly config: LavuConfig) {
+  private constructor(readonly config: HenryConfig) {
     this.activity = new ActivityLog(config.activityPath);
     this.approvals = new ApprovalStore(config.approvalsPath);
-    this.memory = new LavuMemory(config, this.activity);
+    this.memory = new HenryMemory(config, this.activity);
     this.gmail = new GmailService(config, this.activity, this.approvals);
-    this.agent = new LavuAgent(config, this.activity, this.memory);
+    this.agent = new HenryAgent(config, this.activity, this.memory);
     this.luna = new LunaOrchestrator(config, this.activity, this.memory);
     this.scheduler = new WorkflowScheduler(config, this.activity, this.memory, this.gmail);
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
+    this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
+    this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
   }
 
-  static async create(rootDir?: string): Promise<LavuRuntime> {
-    const runtime = new LavuRuntime(loadConfig(rootDir));
+  static async create(rootDir?: string): Promise<HenryRuntime> {
+    const runtime = new HenryRuntime(loadConfig(rootDir));
+    await runtime.loadSettings();
     await runtime.activity.init();
     await runtime.approvals.init();
     await runtime.memory.init();
+    await runtime.jobs.init();
     return runtime;
+  }
+
+  /** Persisted operator settings override env defaults; the dashboard toggle writes them. */
+  private async loadSettings(): Promise<void> {
+    try {
+      const settings = JSON.parse(await fs.readFile(this.config.settingsPath, "utf8")) as Record<string, unknown>;
+      if (settings.provider === "codex" || settings.provider === "claude") this.config.provider = settings.provider;
+    } catch { /* No settings file yet; env/default provider applies. */ }
+  }
+
+  async setProvider(provider: ProviderName): Promise<ProviderName> {
+    if (provider !== "codex" && provider !== "claude") throw new Error(`Unknown provider: ${String(provider)}`);
+    this.config.provider = provider;
+    await fs.mkdir(path.dirname(this.config.settingsPath), { recursive: true, mode: 0o700 });
+    await fs.writeFile(this.config.settingsPath, `${JSON.stringify({ provider }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await this.activity.record("provider.switched", `Primary provider switched to ${provider}`, { provider });
+    return provider;
+  }
+
+  /** Full-access engineering task inside any local repository Dad points Henry at. */
+  async task(instruction: string, cwd?: string): Promise<RunResult> {
+    const dir = path.resolve(cwd || this.config.rootDir);
+    await fs.access(dir).catch(() => { throw new Error(`Task directory does not exist: ${dir}`); });
+    await this.activity.record("task.started", `Codebase task in ${dir}`, { cwd: dir, instruction: instruction.slice(0, 240) });
+    const result = await this.agent.run(
+      [`Work inside the repository at ${dir}. Inspect it before changing anything, run the project's own checks after edits, and summarize every file you changed.`, instruction].join("\n\n"),
+      { cwd: dir },
+    );
+    await this.activity.record("task.completed", `Codebase task finished in ${dir}`, { cwd: dir, exitCode: result.exitCode }, { runId: result.runId, provider: result.provider });
+    return result;
   }
 
   async approve(id: string): Promise<void> {
@@ -46,7 +87,9 @@ export class LavuRuntime {
   async executeApproval(id: string): Promise<string> {
     const item = await this.approvals.claimForExecution(id);
     try {
-      const result = item.kind === "gmail.send" ? await this.gmail.sendApproved(item) : await this.reviewer.postApproved(item);
+      const result = item.kind === "gmail.send" ? await this.gmail.sendApproved(item)
+        : item.kind === "job.application" ? await this.jobs.submitApproved(item)
+        : await this.reviewer.postApproved(item);
       await this.approvals.setStatus(id, "executed", result);
       return result;
     } catch (error) {
@@ -57,9 +100,10 @@ export class LavuRuntime {
 
   async status(): Promise<Record<string, unknown>> {
     return {
-      name: "Lavu", user: "Dad", provider: this.config.provider,
+      name: "Henry", user: "Dad", provider: this.config.provider,
       rootDir: this.config.rootDir, dashboard: `http://${this.config.host}:${this.config.port}`,
       approvals: (await this.approvals.list("pending")).length,
+      jobs: await this.jobs.store.summary(),
       memory: this.memory.engine.stats(),
     };
   }

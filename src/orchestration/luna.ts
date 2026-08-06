@@ -1,6 +1,6 @@
 import type { ActivityLog } from "../activity.ts";
-import type { LavuConfig } from "../config.ts";
-import type { LavuMemory } from "../memory/engram.ts";
+import type { HenryConfig } from "../config.ts";
+import type { HenryMemory } from "../memory/engram.ts";
 import { ProviderRunner } from "../providers/runner.ts";
 
 export const SPECIALISTS = {
@@ -10,6 +10,7 @@ export const SPECIALISTS = {
   dashboard: "Own local dashboard state, APIs, approvals, activity, and clear operator UX.",
   gmail: "Own Gmail OAuth, inbox reading, drafts, polling, and approval-gated outbound actions.",
   "pr-review": "Own the six-pass PR review workflow, re-review behavior, findings, and staged GitHub comments.",
+  "job-application": "Own job posting inspection, truthful tailoring of resumes and answers, form filling for review, and the approval-gated submission boundary. Never invent candidate facts and never bypass site protections.",
   qa: "Own tests, type safety, security boundaries, and verification of the whole agent.",
 } as const;
 
@@ -19,15 +20,15 @@ export class LunaOrchestrator {
   private readonly runner: ProviderRunner;
 
   constructor(
-    private readonly config: LavuConfig,
+    private readonly config: HenryConfig,
     private readonly activity: ActivityLog,
-    private readonly memory: LavuMemory,
+    private readonly memory: HenryMemory,
   ) { this.runner = new ProviderRunner(config, activity); }
 
   async dispatch(role: string, task: string, options: { allowEdits?: boolean; cwd?: string } = {}): Promise<Awaited<ReturnType<ProviderRunner["run"]>>> {
     const selected = (role in SPECIALISTS ? role : "architect") as SpecialistRole;
     const prompt = [
-      `You are Luna's ${selected} specialist working on Lavu.`,
+      `You are Luna's ${selected} specialist working on Henry.`,
       SPECIALISTS[selected],
       options.allowEdits ? "You may edit only files needed for this task and must report changed files." : "This is an investigation pass. Do not edit files; return an implementation memo with concrete next actions.",
       "Keep outbound communication staged; never post messages or comments directly.",

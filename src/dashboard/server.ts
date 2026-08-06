@@ -1,6 +1,6 @@
 import http from "node:http";
 import { DASHBOARD_HTML } from "./page.ts";
-import type { LavuRuntime } from "../runtime.ts";
+import type { HenryRuntime } from "../runtime.ts";
 
 function json(response: http.ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -23,20 +23,20 @@ function localOrigin(request: http.IncomingMessage): boolean {
 
 function loopback(host: string): boolean { return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]"; }
 
-function authorized(request: http.IncomingMessage, runtime: LavuRuntime): boolean {
+function authorized(request: http.IncomingMessage, runtime: HenryRuntime): boolean {
   if (loopback(runtime.config.host)) return true;
   if (!runtime.config.allowRemoteDashboard || !runtime.config.dashboardToken) return false;
   const authorization = request.headers.authorization || "";
-  return authorization === `Bearer ${runtime.config.dashboardToken}` || request.headers["x-lavu-token"] === runtime.config.dashboardToken;
+  return authorization === `Bearer ${runtime.config.dashboardToken}` || request.headers["x-henry-token"] === runtime.config.dashboardToken;
 }
 
-export function startDashboard(runtime: LavuRuntime): http.Server {
+export function startDashboard(runtime: HenryRuntime): http.Server {
   if (!loopback(runtime.config.host) && (!runtime.config.allowRemoteDashboard || !runtime.config.dashboardToken)) {
-    throw new Error("Remote dashboard is disabled; bind LAVU_HOST to loopback or configure LAVU_ALLOW_REMOTE_DASHBOARD=true with LAVU_DASHBOARD_TOKEN");
+    throw new Error("Remote dashboard is disabled; bind HENRY_HOST to loopback or configure HENRY_ALLOW_REMOTE_DASHBOARD=true with HENRY_DASHBOARD_TOKEN");
   }
   const server = http.createServer(async (request, response) => {
     try {
-      if (!loopback(runtime.config.host) && !runtime.config.allowRemoteDashboard) throw new Error("Remote dashboard is disabled; bind LAVU_HOST to loopback or explicitly enable a token-protected remote dashboard");
+      if (!loopback(runtime.config.host) && !runtime.config.allowRemoteDashboard) throw new Error("Remote dashboard is disabled; bind HENRY_HOST to loopback or explicitly enable a token-protected remote dashboard");
       if (!authorized(request, runtime)) { json(response, 401, { error: "dashboard authentication required" }); return; }
       const url = new URL(request.url || "/", `http://${runtime.config.host}:${runtime.config.port}`);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
@@ -47,6 +47,10 @@ export function startDashboard(runtime: LavuRuntime): http.Server {
       if (request.method === "GET" && url.pathname === "/api/activity") { json(response, 200, await runtime.activity.list(Number(url.searchParams.get("limit")) || 100)); return; }
       if (request.method === "GET" && url.pathname === "/api/approvals") { json(response, 200, await runtime.approvals.list()); return; }
       if (request.method === "GET" && url.pathname === "/api/workflows") { json(response, 200, await runtime.scheduler.definitions()); return; }
+      if (request.method === "GET" && url.pathname === "/api/jobs") {
+        json(response, 200, { summary: await runtime.jobs.store.summary(), applications: await runtime.jobs.store.list() }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/settings") { json(response, 200, { provider: runtime.config.provider }); return; }
       if (request.method === "GET" && url.pathname === "/api/memory/graph") { json(response, 200, runtime.memory.graph()); return; }
       if (request.method === "GET" && url.pathname === "/api/memory/recall") {
         const query = url.searchParams.get("q") || "";
@@ -54,6 +58,10 @@ export function startDashboard(runtime: LavuRuntime): http.Server {
         json(response, 200, await runtime.memory.recall(query)); return;
       }
       if (!localOrigin(request)) { json(response, 403, { error: "cross-origin request rejected" }); return; }
+      if (request.method === "POST" && url.pathname === "/api/settings/provider") {
+        const input = await body(request);
+        json(response, 200, { provider: await runtime.setProvider(String(input.provider) as "codex" | "claude") }); return;
+      }
       if (request.method === "POST" && url.pathname === "/api/ask") {
         const input = await body(request); const prompt = String(input.prompt || "");
         if (!prompt) { json(response, 400, { error: "prompt is required" }); return; }

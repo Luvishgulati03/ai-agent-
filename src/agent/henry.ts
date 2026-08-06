@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
-import type { LavuConfig } from "../config.ts";
+import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
-import type { LavuMemory } from "../memory/engram.ts";
+import type { HenryMemory } from "../memory/engram.ts";
 import { ProviderRunner, type RunOptions } from "../providers/runner.ts";
 import { redactSecrets } from "../util/env.ts";
 import { OUTBOUND_EMAIL_APPROVAL_GUARDRAIL } from "../guardrails.ts";
@@ -11,13 +11,13 @@ async function readText(path: string): Promise<string> {
   try { return await fs.readFile(path, "utf8"); } catch { return ""; }
 }
 
-export class LavuAgent {
+export class HenryAgent {
   private readonly runner: ProviderRunner;
 
   constructor(
-    private readonly config: LavuConfig,
+    private readonly config: HenryConfig,
     private readonly activity: ActivityLog,
-    private readonly memory: LavuMemory,
+    private readonly memory: HenryMemory,
   ) { this.runner = new ProviderRunner(config, activity); }
 
   async run(prompt: string, options: RunOptions = {}): Promise<Awaited<ReturnType<ProviderRunner["run"]>>> {
@@ -30,7 +30,7 @@ export class LavuAgent {
       await this.activity.record("run.failed", "Memory recall failed; continuing without memory", { error: String(error) }, { runId });
     }
     const fullPrompt = [
-      "You are Lavu, Luvish Junior, a terminal-first personal engineering agent.",
+      "You are Henry, Luvish Junior, a terminal-first personal engineering agent.",
       "Call the user Dad. Luna is the top-level orchestrator and may delegate specialist work to you.",
       OUTBOUND_EMAIL_APPROVAL_GUARDRAIL,
       "The approval and execution steps are separate. Never approve an action on Dad's behalf, and never treat a send command as approval.",
@@ -44,7 +44,7 @@ export class LavuAgent {
     ].join("\n");
     const result = await this.runner.run(fullPrompt, { ...options, onEvent: (event) => options.onEvent?.(event) });
     if (result.response.trim()) {
-      await this.memory.remember(redactSecrets(`Dad asked: ${prompt}\n\nLavu answered:\n${result.response}`), {
+      await this.memory.remember(redactSecrets(`Dad asked: ${prompt}\n\nHenry answered:\n${result.response}`), {
         source: `captured/${new Date().toISOString().slice(0, 10)}-conversation.md`,
         tier: "episodic", importance: 5, metadata: { runId, provider: result.provider },
       });

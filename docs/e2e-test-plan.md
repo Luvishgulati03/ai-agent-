@@ -1,6 +1,6 @@
-# Lavu end-to-end test plan
+# Henry end-to-end test plan
 
-This is the executable validation plan for Lavu. Tests must run against the isolated repository at `/Users/luvishgulati/Desktop/junior's repo/luvish jr/` and must never send an external message accidentally.
+This is the executable validation plan for Henry. Tests must run against the isolated repository at `/Users/luvishgulati/Desktop/junior's repo/luvish jr/` and must never send an external message accidentally.
 
 ## Test environments
 
@@ -48,13 +48,13 @@ npm run build
 
 | ID | Flow | Expected result | External side effect |
 | --- | --- | --- | --- |
-| E2E-01 | `lavu status` | Returns provider, dashboard, memory, and approval status | None |
-| E2E-02 | `lavu ask "..."` with Codex | Recalls Engram context, returns response, captures outcome | Local memory write only |
+| E2E-01 | `henry status` | Returns provider, dashboard, memory, and approval status | None |
+| E2E-02 | `henry ask "..."` with Codex | Recalls Engram context, returns response, captures outcome | Local memory write only |
 | E2E-03 | Codex failure then Claude fallback | Claude runs, result identifies fallback provider, failure is logged | None |
 | E2E-04 | Interactive REPL | Multiple turns work, `:memory`, `:status`, and `:quit` work | Local memory writes only |
-| E2E-05 | `lavu memory remember/search/index/dream` | Memory survives a new process and graph stats update | Local database/files only |
+| E2E-05 | `henry memory remember/search/index/dream` | Memory survives a new process and graph stats update | Local database/files only |
 | E2E-06 | Dashboard health/status/activity | Localhost endpoints return valid JSON and UI loads | None |
-| E2E-07 | Dashboard ask | Request runs through Lavu and appears in activity | Local memory write only |
+| E2E-07 | Dashboard ask | Request runs through Henry and appears in activity | Local memory write only |
 | E2E-08 | Dashboard dispatch | Luna dispatches a bounded specialist task and records the run | None unless `allowEdits` is explicitly enabled |
 | E2E-09 | Gmail OAuth missing | CLI gives actionable credentials/auth instructions | None |
 | E2E-10 | Gmail inbox read | Messages are parsed with sender, subject, thread, date, and body | Read only |
@@ -74,7 +74,7 @@ npm run build
 ### Terminal and provider flow
 
 1. Start from a clean disposable repository.
-2. Run `lavu status` and assert `provider=codex`.
+2. Run `henry status` and assert `provider=codex`.
 3. Run an ask that requests a deterministic short response.
 4. Assert the response is non-empty and the activity log contains `run.started`, `run.completed`, `memory.recalled`, and `memory.saved`.
 5. Temporarily make the Codex command unavailable through a test-only PATH and run the same ask.
@@ -83,11 +83,11 @@ npm run build
 
 ### Engram persistence and recall
 
-1. Write a unique test decision with `lavu memory remember`.
+1. Write a unique test decision with `henry memory remember`.
 2. Search for a paraphrase in a new process.
 3. Assert the result includes the decision and an explainable `why` field.
-4. Run `lavu memory index --fresh` and repeat the search.
-5. Run `lavu memory dream` and assert the operation completes without deleting protected test memory.
+4. Run `henry memory index --fresh` and repeat the search.
+5. Run `henry memory dream` and assert the operation completes without deleting protected test memory.
 6. Verify only ignored `data/engram.db*` files change.
 
 ### Approval gate
@@ -102,7 +102,7 @@ npm run build
 
 ### Dashboard
 
-1. Start `lavu dashboard` on a random test port.
+1. Start `henry dashboard` on a random test port.
 2. Assert `/api/health`, `/api/status`, `/api/activity`, `/api/approvals`, `/api/workflows`, and `/api/memory/graph` return JSON.
 3. Send a same-origin `POST /api/ask` and assert a response.
 4. Send a cross-origin request with a non-local `Origin` header and assert HTTP 403.
@@ -111,9 +111,9 @@ npm run build
 
 ### Gmail
 
-1. Run `lavu gmail auth` with missing credentials and assert the message is actionable.
+1. Run `henry gmail auth` with missing credentials and assert the message is actionable.
 2. Connect a dedicated sandbox account.
-3. Run `lavu gmail inbox --limit 5` and verify headers/body parsing.
+3. Run `henry gmail inbox --limit 5` and verify headers/body parsing.
 4. Generate a reply with `--thread-id` and assert the local approval payload preserves the thread.
 5. Verify scheduler polling reads messages but never sends.
 6. Send only after explicit approval and verify the exact test recipient, subject, body, and thread.
@@ -121,7 +121,7 @@ npm run build
 ### Pull request review
 
 1. Create a fixture PR containing one known bug, one safety issue, and one missing test.
-2. Run `lavu review <number> --cwd <fixture-repo>`.
+2. Run `henry review <number> --cwd <fixture-repo>`.
 3. Assert the saved report contains all six pass keys, verdict, summary, severity, path, line, and provider.
 4. Assert a `github.review` approval is created and no GitHub review exists yet.
 5. Inspect the staged body in CLI and dashboard.

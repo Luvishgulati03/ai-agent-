@@ -8,7 +8,7 @@ export const OUTBOUND_EMAIL_APPROVAL_GUARDRAIL =
   "Never send or reply to an email without explicit Dad approval. Drafting and saving are allowed; sending requires a separate approval action first.";
 
 /**
- * Outbound integrations may only run after Lavu atomically claims an action
+ * Outbound integrations may only run after Henry atomically claims an action
  * that was already approved. Pending or merely proposed actions never reach
  * Gmail or GitHub.
  */

@@ -3,13 +3,13 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { Engram } from "engram-memory";
 import type { GraphExport, RecallResult } from "engram-memory";
-import type { LavuConfig } from "../config.ts";
+import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 
-export class LavuMemory {
+export class HenryMemory {
   readonly engine: Engram;
 
-  constructor(private readonly config: LavuConfig, private readonly activity: ActivityLog) {
+  constructor(private readonly config: HenryConfig, private readonly activity: ActivityLog) {
     mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
     this.engine = new Engram({ dbPath: config.dbPath, defaultK: 8 });
   }

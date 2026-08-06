@@ -1,11 +1,11 @@
 {
-  "name": "lavu",
+  "name": "henry",
   "version": "0.1.0",
   "private": true,
-  "description": "Lavu — a terminal-first personal engineering agent orchestrated by Luna.",
+  "description": "Henry — a terminal-first personal engineering agent orchestrated by Luna.",
   "type": "module",
   "bin": {
-    "lavu": "./bin/lavu.mjs"
+    "henry": "./bin/henry.mjs"
   },
   "scripts": {
     "dev": "tsx src/cli.ts repl",
@@ -17,10 +17,13 @@
     "build": "tsc --outDir dist --declaration --noEmit false"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "croner": "^9.0.0",
     "dotenv": "^16.4.7",
     "engram-memory": "github:anmolm-growthx/engram-memory#70453fd",
-    "googleapis": "^144.0.0"
+    "googleapis": "^144.0.0",
+    "mongodb": "^7.5.0",
+    "playwright": "^1.62.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",

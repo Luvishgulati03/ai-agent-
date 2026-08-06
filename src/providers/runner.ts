@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { LavuConfig } from "../config.ts";
+import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ProviderEvent, ProviderName, RunResult } from "../types.ts";
 import { safeEnvironment } from "../util/env.ts";
@@ -45,7 +45,7 @@ async function execute(
   const stderrText: string[] = [];
   const child = spawn(command, args, {
     cwd,
-    env: safeEnvironment(provider, { CI: "1", LAVU_RUN_ID: runId }),
+    env: safeEnvironment(provider, { CI: "1", HENRY_RUN_ID: runId }),
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -84,7 +84,7 @@ async function execute(
 }
 
 export class ProviderRunner {
-  constructor(private readonly config: LavuConfig, private readonly activity: ActivityLog) {}
+  constructor(private readonly config: HenryConfig, private readonly activity: ActivityLog) {}
 
   async run(prompt: string, options: RunOptions = {}): Promise<RunResult> {
     const preferred = options.provider || this.config.provider;

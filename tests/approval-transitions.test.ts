@@ -6,7 +6,7 @@ import path from "node:path";
 import { ApprovalStore } from "../src/approval/store.ts";
 
 test("approval store rejects transitions after an action has executed", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "lavu-approval-edge-"));
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "henry-approval-edge-"));
 
   try {
     const store = new ApprovalStore(path.join(rootDir, "approvals.json"));
@@ -31,7 +31,7 @@ test("approval store rejects transitions after an action has executed", async ()
 });
 
 test("approval store cannot claim a pending action for outbound execution", async () => {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "lavu-approval-claim-"));
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "henry-approval-claim-"));
 
   try {
     const store = new ApprovalStore(path.join(rootDir, "approvals.json"));

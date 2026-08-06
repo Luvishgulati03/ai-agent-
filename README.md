@@ -1,6 +1,6 @@
-# Lavu (Luvish Junior)
+# Henry (Luvish Junior)
 
-Lavu is a terminal-first personal engineering agent. Luna orchestrates the build and Lavu orchestrates future specialist work. It uses Codex first, Claude as a fallback, and the actual [Engram memory module](https://github.com/anmolm-growthx/engram-memory) as its canonical memory engine.
+Henry is a terminal-first personal engineering agent. Luna orchestrates the build and Henry orchestrates future specialist work. It uses Codex first, Claude as a fallback, and the actual [Engram memory module](https://github.com/anmolm-growthx/engram-memory) as its canonical memory engine.
 
 ## What is implemented
 
@@ -29,23 +29,23 @@ Open the dashboard at http://127.0.0.1:7337.
 ## Common commands
 
 ```bash
-lavu ask "summarize the current git changes"
-lavu review 123 --repo /path/to/repo
-lavu dispatch pr-review "review the current pull request"
-lavu memory search "what did we decide about deploys?"
-lavu memory remember "Always run migrations before application deploys."
-lavu gmail inbox --limit 10
-lavu gmail draft --to someone@example.com --subject "Draft" --body "Do not send yet"
-lavu gmail reply --to someone@example.com --thread-id <gmail-thread-id> --subject "Re: Draft" --body "Staged reply"
-lavu approve list
-lavu approve send <approval-id>
-lavu schedule daemon
-lavu schedule install
+henry ask "summarize the current git changes"
+henry review 123 --repo /path/to/repo
+henry dispatch pr-review "review the current pull request"
+henry memory search "what did we decide about deploys?"
+henry memory remember "Always run migrations before application deploys."
+henry gmail inbox --limit 10
+henry gmail draft --to someone@example.com --subject "Draft" --body "Do not send yet"
+henry gmail reply --to someone@example.com --thread-id <gmail-thread-id> --subject "Re: Draft" --body "Staged reply"
+henry approve list
+henry approve send <approval-id>
+henry schedule daemon
+henry schedule install
 ```
 
 ## Important safety boundary
 
-Codex is configured for full local access with no interactive approval prompts. Lavu separately blocks outbound messages. Email, GitHub comments, and any other message are drafted, saved to Engram, shown on the dashboard, and sent only after Dad explicitly approves them.
+Codex is configured for full local access with no interactive approval prompts. Henry separately blocks outbound messages. Email, GitHub comments, and any other message are drafted, saved to Engram, shown on the dashboard, and sent only after Dad explicitly approves them.
 
 ## Configuration
 
