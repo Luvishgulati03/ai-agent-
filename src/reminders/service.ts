@@ -117,8 +117,11 @@ export class ReminderService {
     private readonly activity: ActivityLog,
   ) {}
 
+  // Buildathon scheduler-module design: ALWAYS re-read the file — the creator CLI,
+  // the REPL ticker, and the dashboard ticker are separate processes sharing this
+  // JSON; an in-memory cache lets one process's save() erase another's writes
+  // (this exact bug ate a scheduled reminder on 2026-08-06).
   private async ensure(): Promise<void> {
-    if (this.loaded) return;
     await fs.mkdir(path.dirname(this.config.remindersPath), { recursive: true, mode: 0o700 });
     try {
       this.items = JSON.parse(await fs.readFile(this.config.remindersPath, "utf8")) as Reminder[];
