@@ -46,13 +46,21 @@ export class KnowledgeBase {
    */
   async recall(query: string, options: { k?: number; domain?: string; layer?: "card" | "raw"; minScore?: number } = {}): Promise<RecallResult[]> {
     const k = options.k ?? 8;
-    const minScore = options.minScore ?? 0.05;
-    const results = await this.engine.recall(query, { k: k * 3, associative: true, markUsed: true, reinforce: true });
+    // Engram's fused hybrid scores live in a small range; 0.02 is the empirical noise floor.
+    const minScore = options.minScore ?? 0.02;
+    const results = await this.engine.recall(query, { k: k * 4, associative: true, markUsed: true, reinforce: true });
+    // LX-RAG lesson: a declared domain BOOSTS ranking but never hard-filters —
+    // hard domain filters create blind spots (community content answering a GTM query).
+    const boosted = options.domain
+      ? results.map((result) => {
+          const meta = (result.metadata || {}) as Record<string, unknown>;
+          return meta.domain === options.domain ? { ...result, score: result.score * 1.5 } : result;
+        }).sort((a, b) => b.score - a.score)
+      : results;
     const perModule = new Map<string, number>();
-    const filtered = results.filter((result) => {
+    const filtered = boosted.filter((result) => {
       const meta = (result.metadata || {}) as Record<string, unknown>;
       if (result.score < minScore) return false;
-      if (options.domain && meta.domain !== options.domain) return false;
       if (options.layer && meta.layer !== options.layer) return false;
       const moduleKey = String(meta.moduleId || meta.module || result.source);
       const seen = perModule.get(moduleKey) || 0;
