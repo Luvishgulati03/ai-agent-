@@ -255,6 +255,19 @@ The dispatch doctrine is engine-agnostic and must be first-class on Codex, not a
 
 Token profile per application: **one frontier call, two nano calls, everything else deterministic.** Every workflow in the system (PR review, worklog, interview prep, X drafting, release notes) gets an equivalent decomposition table when built — authored in the workflow file itself so the decomposition is versioned and reviewable.
 
+## 11.5 Response-latency optimization plan (PLANNED 2026-08-07 — not yet implemented)
+
+Observed: REPL turns take ~40-60s. Root causes ranked, fix per cause, implement in this order:
+
+1. **No streaming display** (biggest perceived win, zero risk): ProviderRunner already gets JSONL events via onEvent; the REPL prints nothing until completion. Fix: stream text deltas live to terminal + dashboard SSE. Effort S.
+2. **Cold ephemeral session per turn** (biggest actual win): every turn spawns fresh `codex exec --ephemeral`/`claude -p` re-sending the full prompt. Fix: per-surface session reuse (codex --session / claude --resume, Friday's model); reset on :reset or 2h idle. Effort M.
+3. **Prompt obesity**: soul+personality+AGENTS+capabilities+memory+knowledge ≈ 8-12k chars every turn. Fix: static blocks via --append-system-prompt-file (never re-sent on resumed sessions); trim AGENTS injection; memory k 8→5 with score floor. Effort S-M.
+4. **Synchronous post-turn memory capture**: agent.run awaits remember() (embed+write) before returning. Fix: fire-and-forget after response. Effort S.
+5. **No intent tiering**: greetings/acks take the full frontier pass. Fix: zero-LLM gate (length+pattern) routing trivial turns to t0 haiku/mini; anything touching tools/actions stays t1+. Effort M.
+6. **Spinner honesty**: elapsed seconds + phase (recalling → thinking → acting) from the event stream. Effort S.
+
+Target after 1-4: first visible tokens <8s; trivial turns <10s; complex turns same quality, streaming from the start.
+
 ## 12. Continuation protocol (anti-hallucination handoff)
 
 Any agent (Codex, Claude, or other) picking up this project MUST:
