@@ -13,7 +13,7 @@ const GX_BACKEND = process.env.GX_BACKEND_DIR || "/Users/luvishgulati/Growth x r
 interface ExportCounts { chunks: number; transcripts: number; texts: number; modules: number }
 
 /** Flattens Quill Delta / Lexical / arbitrary editor JSON into plain prose; passes plain text through. */
-function richTextToPlain(raw: string): string {
+export function richTextToPlain(raw: string): string {
   if (!raw) return "";
   const trimmed = raw.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return trimmed;

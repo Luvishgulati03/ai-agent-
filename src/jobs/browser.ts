@@ -77,7 +77,7 @@ async function extractSnapshot(page: Page): Promise<JobPageSnapshot> {
     const control = label.htmlFor ? document.getElementById(label.htmlFor) : label.querySelector("input, textarea, select");
     if (!text || !control) return null;
     const element = control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-    const kind = element.tagName === "TEXTAREA" ? "textarea" : element.tagName === "SELECT" ? (element.multiple ? "multi" : "single") : element.type === "checkbox" ? "boolean" : "text";
+    const kind = element.tagName === "TEXTAREA" ? "textarea" : element.tagName === "SELECT" ? ((element as HTMLSelectElement).multiple ? "multi" : "single") : element.type === "checkbox" ? "boolean" : "text";
     const options = element.tagName === "SELECT" ? Array.from((element as HTMLSelectElement).options).map((option) => option.textContent?.trim() || "").filter(Boolean) : undefined;
     return { id: element.id || element.name || `question-${index + 1}`, label: text, required: element.required, kind, ...(options?.length ? { options } : {}) };
   }).filter((item): item is JobQuestion => item !== null));

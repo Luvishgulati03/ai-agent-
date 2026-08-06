@@ -6,7 +6,7 @@ import type { ActivityLog } from "../activity.ts";
 import type { HenryMemory } from "../memory/engram.ts";
 import type { ProviderRunner } from "../providers/runner.ts";
 import type { JobApplicationService } from "./service.ts";
-import { renderResumePdf } from "./resume.ts";
+import { renderResumePdf, type ResumeRenderer } from "./resume.ts";
 
 function run(command: string, args: string[]): Promise<number> {
   return new Promise((resolve) => {
@@ -21,13 +21,18 @@ function slugify(value: string): string {
 }
 
 export class CoverLetterService {
+  private readonly renderResume: ResumeRenderer;
+
   constructor(
     private readonly config: HenryConfig,
     private readonly activity: ActivityLog,
     private readonly memory: HenryMemory,
     private readonly runner: ProviderRunner,
     private readonly jobs: JobApplicationService,
-  ) {}
+    renderResume?: ResumeRenderer,
+  ) {
+    this.renderResume = renderResume || renderResumePdf;
+  }
 
   /** One-time (or whenever the resume changes): convert Dad's .docx/.txt/.md resume into resume.md. */
   async importResume(sourcePath: string): Promise<string> {
@@ -97,7 +102,7 @@ export class CoverLetterService {
     const base = `${new Date().toISOString().slice(0, 10)}-${slugify(`${company}-${title}`)}`;
     const markdownPath = path.join(outDir, `${base}.md`);
     await fs.writeFile(markdownPath, `${letter}\n`, "utf8");
-    const pdfPath = await renderResumePdf(letter, path.join(outDir, `${base}.pdf`));
+    const pdfPath = await this.renderResume(letter, path.join(outDir, `${base}.pdf`));
     await this.activity.record("resume.generated", `Cover letter: ${title} at ${company}`, { pdfPath, company, title });
     await this.memory.remember(
       `Generated cover letter for ${title} at ${company}. File: ${pdfPath}`,
