@@ -73,8 +73,13 @@ async function main(): Promise<void> {
       let redrawPrompt: () => void = () => {};
       const ticker = startReminderTicker(runtime.reminders, runtime.activity, {
         role: "repl",
-        // Terminal-first delivery: the message lands IN the REPL, cleanly above the prompt.
-        notify: async (message) => { process.stdout.write(`\n\u{1F514} ${message}\n`); redrawPrompt(); },
+        // Terminal delivery PLUS system banner + telegram: prints in the REPL above
+        // the prompt, and also fires the composed operator notifier.
+        notify: async (message, title) => {
+          process.stdout.write(`\n\u{1F514} ${message}\n`);
+          redrawPrompt();
+          void runtime.notifyOperator(message, title).catch(() => undefined);
+        },
         promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
         executeApproval: (approvalId) => runtime.executeApproval(approvalId),
       });

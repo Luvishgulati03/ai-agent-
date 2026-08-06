@@ -61,17 +61,27 @@ export const PROMPT_NO_NOTIFICATION = "NO_MATCH";
 export type ExecuteApprovalFn = (approvalId: string) => Promise<string>;
 
 /** macOS notification, best-effort; console logging always fires as the say-free fallback (and always gets the untruncated text). */
+let terminalNotifierAvailable: boolean | undefined;
+
 export const notifyReminder: ReminderNotifier = async (message, title = "Henry") => {
   console.log(`[Henry reminder] ${message}`);
   const body = message.length > OSASCRIPT_NOTIFICATION_MAX_CHARS
     ? `${message.slice(0, OSASCRIPT_NOTIFICATION_MAX_CHARS - 1)}…`
     : message;
+  // terminal-notifier is a registered notification app on this Mac; osascript
+  // banners die silently without registration (observed 2026-08-06). Prefer it.
+  if (terminalNotifierAvailable === undefined) {
+    terminalNotifierAvailable = await new Promise<boolean>((resolve) => {
+      const probe = spawn("which", ["terminal-notifier"], { stdio: "ignore" });
+      probe.once("error", () => resolve(false));
+      probe.once("close", (code) => resolve(code === 0));
+    });
+  }
+  const [command, args] = terminalNotifierAvailable
+    ? ["terminal-notifier", ["-title", title, "-message", body, "-sound", "Glass"]] as const
+    : ["osascript", ["-e", `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`]] as const;
   await new Promise<void>((resolve) => {
-    const child = spawn(
-      "osascript",
-      ["-e", `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`],
-      { stdio: "ignore" },
-    );
+    const child = spawn(command, [...args], { stdio: "ignore" });
     child.once("error", () => resolve());
     child.once("close", () => resolve());
   });
