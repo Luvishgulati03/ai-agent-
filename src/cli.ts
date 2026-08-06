@@ -43,7 +43,10 @@ const REPL_HELP = ":status  :dashboard  :memory <query>  :provider [codex|claude
 async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle, setRedraw?: (fn: () => void) => void): Promise<void> {
   const rl = readline.createInterface({ input, output, prompt: "henry> " });
   // Reminders fired by the in-process ticker print here, above the prompt.
-  setRedraw?.(() => rl.prompt(true));
+  let rlClosed = false;
+  rl.once("close", () => { rlClosed = true; });
+  const safePrompt = (preserve = false): void => { if (!rlClosed) rl.prompt(preserve); };
+  setRedraw?.(() => safePrompt(true));
   console.log("Henry is ready, Dad. Type :help for commands or ask normally.\n");
 
   const queue = createInputQueue();
@@ -98,18 +101,18 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
       return;
     }
     if (quitting) { rl.close(); return; }
-    rl.prompt();
+    safePrompt();
   }
 
-  rl.prompt();
+  safePrompt();
   rl.on("line", (line) => {
     const value = line.trim();
     if (quitting) return; // ignore stray input after :quit was requested
-    if (!value) { if (!queue.busy) rl.prompt(); return; }
+    if (!value) { if (!queue.busy) safePrompt(); return; }
 
     if (queue.busy) {
-      if (value === ":help") { console.log(REPL_HELP); rl.prompt(true); return; }
-      if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); rl.prompt(true); return; }
+      if (value === ":help") { console.log(REPL_HELP); safePrompt(true); return; }
+      if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); safePrompt(true); return; }
       if (value === ":quit" || value === ":exit") {
         quitting = true;
         console.log("finishing current reply, then exiting…");
@@ -117,25 +120,25 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
       }
       const count = queue.push(value);
       console.log(`\x1b[2m⏳ queued (${count}) — henry is still thinking\x1b[0m`);
-      rl.prompt(true);
+      safePrompt(true);
       return;
     }
 
     if (value === ":quit" || value === ":exit") { rl.close(); return; }
     void (async () => {
       try {
-        if (value === ":help") { console.log(REPL_HELP); rl.prompt(); return; }
-        if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); rl.prompt(); return; }
-        if (value === ":status") { print(await runtime.status()); rl.prompt(); return; }
-        if (value.startsWith(":memory ")) { print(await runtime.memory.recall(value.slice(8))); rl.prompt(); return; }
-        if (value === ":provider") { console.log(`Primary provider: ${runtime.config.provider}`); rl.prompt(); return; }
-        if (value.startsWith(":provider ")) { console.log(`Primary provider set to ${await runtime.setProvider(value.slice(10).trim() as "codex" | "claude")}`); rl.prompt(); return; }
+        if (value === ":help") { console.log(REPL_HELP); safePrompt(); return; }
+        if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); safePrompt(); return; }
+        if (value === ":status") { print(await runtime.status()); safePrompt(); return; }
+        if (value.startsWith(":memory ")) { print(await runtime.memory.recall(value.slice(8))); safePrompt(); return; }
+        if (value === ":provider") { console.log(`Primary provider: ${runtime.config.provider}`); safePrompt(); return; }
+        if (value.startsWith(":provider ")) { console.log(`Primary provider set to ${await runtime.setProvider(value.slice(10).trim() as "codex" | "claude")}`); safePrompt(); return; }
         queue.start();
         await runAgentTurn(value);
         await afterRun();
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
-        rl.prompt();
+        safePrompt();
       }
     })();
   });
