@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { DASHBOARD_HTML } from "./page.ts";
 import { KnowledgeBase } from "../knowledge/store.ts";
 import { sampleResources } from "./resources.ts";
+import { sharedAdmissionController } from "../orchestration/admission.ts";
 import type { HenryRuntime } from "../runtime.ts";
 import type { ActivityEvent } from "../types.ts";
 
@@ -154,11 +155,23 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
           try {
             const resources = await sampleResources();
             const pending = await runtime.approvals.list("pending").catch(() => []);
+            const admission = sharedAdmissionController().snapshot();
+            const lastActivityAt = events[0]?.timestamp ?? null;
+            const lastActivityAgeSec = lastActivityAt
+              ? Math.max(0, Math.round((Date.now() - new Date(lastActivityAt).getTime()) / 1000))
+              : null;
             sseWrite(response, "resources", {
               ...resources,
+              agentState: {
+                state: admission.running > 0 ? "working" : "idle",
+                running: admission.running,
+                heavy: admission.heavyRunning,
+                queued: admission.queued,
+              },
               heartbeat: {
                 uptimeSec: Math.round(process.uptime()),
-                lastActivityAt: events[0]?.timestamp ?? null,
+                lastActivityAt,
+                lastActivityAgeSec,
                 pendingApprovals: pending.length,
               },
             });
