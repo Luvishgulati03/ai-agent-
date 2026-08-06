@@ -29,7 +29,8 @@ export type ActivityKind =
   | "resume.generated"
   | "provider.switched"
   | "task.started"
-  | "task.completed";
+  | "task.completed"
+  | "social.drafted";
 
 export interface ActivityEvent {
   id: string;

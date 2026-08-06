@@ -6,6 +6,11 @@ import type { ActivityLog } from "../activity.ts";
 import type { HenryMemory } from "../memory/engram.ts";
 import type { GmailService } from "../integrations/gmail.ts";
 import type { WorkflowDefinition } from "../types.ts";
+import type { ReminderService, ReminderNotifier } from "../reminders/service.ts";
+import { notifyReminder } from "../reminders/service.ts";
+
+/** How often the daemon polls for due reminders (§ reminders doctrine). */
+const REMINDER_POLL_MS = 60_000;
 
 /** Reads the pid recorded in a lock file; returns undefined if absent/unreadable. */
 async function readLockPid(lockPath: string): Promise<number | undefined> {
@@ -22,12 +27,15 @@ function isPidAlive(pid: number): boolean {
 
 export class WorkflowScheduler {
   private jobs: Array<{ definition: WorkflowDefinition; cron: Cron }> = [];
+  private reminderTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly config: HenryConfig,
     private readonly activity: ActivityLog,
     private readonly memory: HenryMemory,
     private readonly gmail: GmailService,
+    private readonly reminders?: ReminderService,
+    private readonly notifyReminderFn: ReminderNotifier = notifyReminder,
   ) {}
 
   async definitions(): Promise<WorkflowDefinition[]> {
@@ -42,7 +50,24 @@ export class WorkflowScheduler {
       this.jobs.push({ definition, cron });
     }
     await this.activity.record("workflow.started", `Started ${definitions.length} scheduled workflows`, { workflows: definitions.map((item) => item.id) });
+    this.armReminders();
     return definitions;
+  }
+
+  /**
+   * Arms the reminder poller: an immediate check (so reminders that came due while the
+   * daemon was down fire right away, "(overdue)"-prefixed) followed by a 60s interval.
+   */
+  private armReminders(): void {
+    if (!this.reminders) return;
+    const check = (): void => {
+      void this.reminders!.fireDue(this.notifyReminderFn).catch(
+        (error) => this.activity.record("workflow.failed", "Reminder check failed", { error: String(error) }),
+      );
+    };
+    check();
+    this.reminderTimer = setInterval(check, REMINDER_POLL_MS);
+    this.reminderTimer.unref?.();
   }
 
   async run(definition: WorkflowDefinition): Promise<unknown> {
@@ -94,5 +119,9 @@ export class WorkflowScheduler {
     }
   }
 
-  stop(): void { for (const job of this.jobs) job.cron.stop(); this.jobs = []; }
+  stop(): void {
+    for (const job of this.jobs) job.cron.stop();
+    this.jobs = [];
+    if (this.reminderTimer) { clearInterval(this.reminderTimer); this.reminderTimer = undefined; }
+  }
 }

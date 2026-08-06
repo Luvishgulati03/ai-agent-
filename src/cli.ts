@@ -6,6 +6,7 @@ import path from "node:path";
 import { HenryRuntime } from "./runtime.ts";
 import { startDashboard } from "./dashboard/server.ts";
 import { writeCronFile, writeLaunchdPlist } from "./scheduler/install.ts";
+import { parseAt, parseIn } from "./reminders/service.ts";
 
 const args = process.argv.slice(2);
 
@@ -41,7 +42,12 @@ async function repl(runtime: HenryRuntime): Promise<void> {
       else if (value.startsWith(":memory ")) print(await runtime.memory.recall(value.slice(8)));
       else if (value === ":provider") console.log(`Primary provider: ${runtime.config.provider}`);
       else if (value.startsWith(":provider ")) console.log(`Primary provider set to ${await runtime.setProvider(value.slice(10).trim() as "codex" | "claude")}`);
-      else print((await runtime.agent.run(value)).response);
+      else {
+        const spinner = setInterval(() => process.stdout.write("."), 3000);
+        process.stdout.write("henry is thinking");
+        try { const result = await runtime.agent.run(value); console.log(); print(result.response); }
+        finally { clearInterval(spinner); }
+      }
     } catch (error) { console.error(error instanceof Error ? error.message : String(error)); }
     rl.prompt();
   }
@@ -241,7 +247,36 @@ async function main(): Promise<void> {
         print({ armed });
         console.log("Henry workflow engine is running. Press Ctrl+C to stop.");
       } else throw new Error("Usage: henry workflow list|show <name>|run <name>|logs <name>|daemon");
-    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow");
+    } else if (command === "goal") {
+      const description = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
+      if (!description) throw new Error("Usage: henry goal <description...>");
+      const { filePath, raw } = await runtime.goals.intake(description);
+      console.log(raw);
+      console.log(`\nSaved plan: ${filePath}`);
+      console.log("Dad reviews this plan, then uses `henry code`/`henry dispatch` (or asks Henry to proceed) — nothing here was auto-executed.");
+    } else if (command === "remind") {
+      const sub = args[1];
+      if (sub === "list") {
+        print((await runtime.reminders.list()).map((item) => ({ id: item.id, text: item.text, dueAt: item.dueAt, status: item.status })));
+      } else if (sub === "cancel") {
+        if (!args[2]) throw new Error("Usage: henry remind cancel <id>");
+        print(await runtime.reminders.cancel(args[2]));
+      } else {
+        const text = sub;
+        const at = option("--at");
+        const inValue = option("--in");
+        if (!text || (!at && !inValue)) throw new Error('Usage: henry remind "<text>" --at "YYYY-MM-DD HH:mm" | --in "2h"');
+        const dueAt = at ? parseAt(at) : parseIn(inValue!);
+        const reminder = await runtime.reminders.create(text, dueAt);
+        print({ id: reminder.id, text: reminder.text, dueAt: reminder.dueAt, status: reminder.status });
+      }
+    } else if (command === "linkedin") {
+      const topic = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
+      if (!topic) throw new Error("Usage: henry linkedin <topic...>");
+      const result = await runtime.linkedin.draft(topic);
+      console.log(result.draft);
+      console.log(`\nDraft saved — review and post manually: ${result.markdownPath}`);
+    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, linkedin");
   } finally {
     if (!keepAlive) runtime.close();
   }

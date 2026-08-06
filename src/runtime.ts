@@ -17,6 +17,9 @@ import { MeetingShadowService } from "./meetings/service.ts";
 import { ScreenshotSorterService } from "./screenshots/service.ts";
 import { ResumeEditorService } from "./jobs/resume-editor.ts";
 import { WorkflowEngine } from "./workflows/engine.ts";
+import { GoalService } from "./goals/service.ts";
+import { ReminderService } from "./reminders/service.ts";
+import { LinkedInDraftService } from "./social/linkedin.ts";
 import type { ProviderName, RunResult } from "./types.ts";
 
 export class HenryRuntime {
@@ -33,6 +36,9 @@ export class HenryRuntime {
   readonly resumeEditor: ResumeEditorService;
   readonly meetings: MeetingShadowService;
   readonly screenshots: ScreenshotSorterService;
+  readonly goals: GoalService;
+  readonly reminders: ReminderService;
+  readonly linkedin: LinkedInDraftService;
   private _knowledge?: KnowledgeBase;
   private _workflowEngine?: WorkflowEngine;
 
@@ -43,13 +49,16 @@ export class HenryRuntime {
     this.gmail = new GmailService(config, this.activity, this.approvals);
     this.agent = new HenryAgent(config, this.activity, this.memory, () => this.knowledge);
     this.luna = new LunaOrchestrator(config, this.activity, this.memory);
-    this.scheduler = new WorkflowScheduler(config, this.activity, this.memory, this.gmail);
+    this.reminders = new ReminderService(config, this.activity);
+    this.scheduler = new WorkflowScheduler(config, this.activity, this.memory, this.gmail, this.reminders);
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
     this.resumeEditor = new ResumeEditorService(config, this.activity, this.memory, this.agent.providerRunner);
     this.meetings = new MeetingShadowService(config, this.activity, this.memory, this.agent.providerRunner);
     this.screenshots = new ScreenshotSorterService(config, this.activity, this.agent.providerRunner);
+    this.goals = new GoalService(config, this.activity, this.memory, this.luna);
+    this.linkedin = new LinkedInDraftService(config, this.activity, this.memory, this.agent.providerRunner);
   }
 
   /** Lazily opens the GrowthX knowledge DB on first domain-relevant turn; keeps boot fast. */

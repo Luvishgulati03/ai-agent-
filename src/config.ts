@@ -42,6 +42,9 @@ export interface HenryConfig {
   screenshotsSortedDir: string;
   whisperModelPath?: string;
   meetingsDir: string;
+  goalsDir: string;
+  remindersPath: string;
+  socialDir: string;
 }
 
 const thisFile = fileURLToPath(import.meta.url);
@@ -114,5 +117,8 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     screenshotsSortedDir: path.resolve(expandHome(env("SCREENSHOTS_SORTED_DIR") || "~/Pictures/sorted-screenshots")),
     whisperModelPath: env("WHISPER_MODEL") || undefined,
     meetingsDir: path.join(dataDir, "meetings"),
+    goalsDir: path.join(dataDir, "goals"),
+    remindersPath: path.join(dataDir, "reminders.json"),
+    socialDir: path.join(dataDir, "social"),
   };
 }
