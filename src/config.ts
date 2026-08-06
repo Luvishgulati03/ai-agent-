@@ -1,6 +1,9 @@
 import "dotenv/config";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+const DEFAULT_SCREENSHOT_CATEGORIES = ["work", "design-reference", "receipts", "memes", "documents", "code", "_unsorted"];
 
 export interface HenryConfig {
   rootDir: string;
@@ -32,6 +35,11 @@ export interface HenryConfig {
   resumeOutputDir: string;
   browserProfileDir: string;
   browserHeadless: boolean;
+  screenshotCategories: string[];
+  screenshotsWatchDir: string;
+  screenshotsSortedDir: string;
+  whisperModelPath?: string;
+  meetingsDir: string;
 }
 
 const thisFile = fileURLToPath(import.meta.url);
@@ -50,6 +58,19 @@ function bool(value: string | undefined, fallback: boolean): boolean {
 function resolveFromRoot(rootDir: string, value: string | undefined, fallback: string): string {
   const selected = value || fallback;
   return path.isAbsolute(selected) ? selected : path.resolve(rootDir, selected);
+}
+
+/** Expands a leading `~` (or `~/...`) to the current user's home directory. */
+function expandHome(value: string): string {
+  if (value === "~") return os.homedir();
+  if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
+  return value;
+}
+
+function parseScreenshotCategories(value: string | undefined): string[] {
+  if (!value) return DEFAULT_SCREENSHOT_CATEGORIES;
+  const parsed = value.split(",").map((entry) => entry.trim()).filter(Boolean);
+  return parsed.length ? parsed : DEFAULT_SCREENSHOT_CATEGORIES;
 }
 
 export function loadConfig(rootDir = defaultRoot): HenryConfig {
@@ -85,5 +106,10 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     resumeOutputDir: path.join(dataDir, "resumes"),
     browserProfileDir: resolveFromRoot(rootDir, env("BROWSER_PROFILE_DIR"), "data/browser-profile"),
     browserHeadless: bool(env("BROWSER_HEADLESS"), false),
+    screenshotCategories: parseScreenshotCategories(env("SCREENSHOT_CATEGORIES")),
+    screenshotsWatchDir: path.resolve(expandHome(env("SCREENSHOTS_DIR") || "~/Desktop")),
+    screenshotsSortedDir: path.resolve(expandHome(env("SCREENSHOTS_SORTED_DIR") || "~/Pictures/sorted-screenshots")),
+    whisperModelPath: env("WHISPER_MODEL") || undefined,
+    meetingsDir: path.join(dataDir, "meetings"),
   };
 }
