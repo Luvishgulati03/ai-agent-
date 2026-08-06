@@ -45,8 +45,32 @@ function parseFrontmatterFile(raw: string): { fields: Record<string, unknown>; b
 
 interface StrategyCard { claim: string; whenToUse: string; steps: string[]; evidence: string }
 
+interface ModuleDoc { _id: string | { $oid: string }; name: string }
+
 export interface IngestReport { entries: number; skipped: number; byDomain: Record<string, number> }
 export interface DistillReport { modules: number; cards: number; remaining: number }
+
+/**
+ * Load modules.json into a Map<moduleId, moduleName> for resolution.
+ * Handles _id as both string and {$oid} format.
+ * Returns empty map if file doesn't exist.
+ */
+async function loadModulesMap(rawDir: string): Promise<Map<string, string>> {
+  const modulesPath = path.join(rawDir, "modules.json");
+  try {
+    const content = await fs.readFile(modulesPath, "utf8");
+    const modules = JSON.parse(content) as ModuleDoc[];
+    const map = new Map<string, string>();
+    for (const mod of modules) {
+      const id = typeof mod._id === "string" ? mod._id : mod._id.$oid;
+      map.set(id, mod.name);
+    }
+    return map;
+  } catch {
+    // Gracefully degrade if modules.json is missing or invalid
+    return new Map();
+  }
+}
 
 /**
  * Two-layer ingestion: `ingestRaw` indexes the exported corpus with local
@@ -66,18 +90,21 @@ export class KnowledgeIngestor {
 
   private async collectRawEntries(): Promise<KnowledgeEntry[]> {
     const entries: KnowledgeEntry[] = [];
+    const modulesMap = await loadModulesMap(this.rawDir);
     const chunksRaw = await fs.readFile(path.join(this.rawDir, "chunks.jsonl"), "utf8").catch(() => "");
     for (const line of chunksRaw.split("\n").filter(Boolean)) {
       const chunk = JSON.parse(line) as Record<string, unknown>;
       const text = String(chunk.text || chunk.content || "");
       if (text.length < 80) continue;
-      const module = String(chunk.module_name || chunk.module_id || "unknown-module");
+      const moduleId = String(chunk.module_id || "");
+      const catalogName = moduleId ? modulesMap.get(moduleId) : undefined;
+      const module = catalogName || String(chunk.module_name || moduleId || "unknown-module");
       const concepts = Array.isArray(chunk.teaches_concepts) ? chunk.teaches_concepts.map(String) : [];
       const title = String(chunk.chapter_title || chunk.title || "");
       entries.push({
         content: title ? `${title}\n${text}` : text,
         source: `gx-learn/chunks/${String(chunk._id)}`,
-        metadata: { layer: "raw", domain: deriveDomain([module, title, ...concepts]), module, concepts, difficulty: chunk.difficulty, contentRole: chunk.content_role, moduleId: String(chunk.module_id) },
+        metadata: { layer: "raw", domain: deriveDomain([module, title, ...concepts]), module, concepts, difficulty: chunk.difficulty, contentRole: chunk.content_role, moduleId },
       });
     }
     for (const sub of ["transcripts", "texts"]) {
