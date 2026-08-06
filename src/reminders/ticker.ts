@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { ActivityLog } from "../activity.ts";
 import type { ReminderService, ReminderNotifier, PromptRunner, ExecuteApprovalFn } from "./service.ts";
 import { notifyReminder } from "./service.ts";
@@ -9,11 +11,42 @@ export interface ReminderTickerHandle {
   stop(): void;
 }
 
+export type ReminderTickerRole = "repl" | "dashboard" | "daemon";
+
 export interface ReminderTickerOptions {
   notify?: ReminderNotifier;
   promptRunner?: PromptRunner;
   executeApproval?: ExecuteApprovalFn;
   pollMs?: number;
+  /** Interactive surfaces outrank background ones for delivery (repl > dashboard/daemon). */
+  role?: ReminderTickerRole;
+  /** Lock-file path; defaults to data/reminder-ticker.lock next to the reminders file. */
+  lockPath?: string;
+}
+
+/**
+ * Cross-process firing ownership. Multiple Henry processes (repl, dashboard, daemon)
+ * all poll; without ownership, whichever polls first fires the reminder into ITS
+ * surface — a background dashboard silently swallowing messages meant for Dad's
+ * terminal (observed 2026-08-06). Rule: one live owner fires; a repl always takes
+ * over from background owners; background processes only claim a dead/absent lock.
+ */
+function claimOwnership(lockPath: string, role: ReminderTickerRole): boolean {
+  let owner: { pid: number; role: ReminderTickerRole } | undefined;
+  try { owner = JSON.parse(fs.readFileSync(lockPath, "utf8")); } catch { owner = undefined; }
+  const ownerAlive = owner ? (() => { try { process.kill(owner.pid, 0); return true; } catch { return false; } })() : false;
+  if (ownerAlive && owner!.pid !== process.pid) {
+    if (role === "repl" && owner!.role !== "repl") {
+      // Interactive takeover: the terminal Dad is watching wins.
+    } else {
+      return false;
+    }
+  }
+  try {
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, role }), { mode: 0o600 });
+    return true;
+  } catch { return false; }
 }
 
 /**
@@ -41,8 +74,11 @@ export function startReminderTicker(
 
   const notify = options.notify ?? notifyReminder;
   const pollMs = options.pollMs ?? REMINDER_POLL_MS;
+  const role = options.role ?? "daemon";
+  const lockPath = options.lockPath ?? path.join(path.dirname((reminders as unknown as { config?: { remindersPath?: string } }).config?.remindersPath ?? "data/reminders.json"), "reminder-ticker.lock");
 
   const check = (): void => {
+    if (!claimOwnership(lockPath, role)) return;
     void reminders.fireDue(notify, new Date(), options.promptRunner, options.executeApproval).catch(
       (error) => activity.record("workflow.failed", "Reminder check failed", { error: String(error) }),
     );
@@ -58,6 +94,10 @@ export function startReminderTicker(
       if (stopped) return;
       stopped = true;
       clearInterval(timer);
+      try {
+        const owner = JSON.parse(fs.readFileSync(lockPath, "utf8")) as { pid: number };
+        if (owner.pid === process.pid) fs.rmSync(lockPath, { force: true });
+      } catch { /* lock already gone */ }
       started = false;
     },
   };

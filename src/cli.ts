@@ -71,6 +71,7 @@ async function main(): Promise<void> {
       keepAlive = true;
       let redrawPrompt: () => void = () => {};
       const ticker = startReminderTicker(runtime.reminders, runtime.activity, {
+        role: "repl",
         // Terminal-first delivery: the message lands IN the REPL, cleanly above the prompt.
         notify: async (message) => { process.stdout.write(`\n\u{1F514} ${message}\n`); redrawPrompt(); },
         promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
@@ -80,6 +81,7 @@ async function main(): Promise<void> {
     } else if (command === "dashboard") {
       startDashboard(runtime); keepAlive = true;
       startReminderTicker(runtime.reminders, runtime.activity, {
+        role: "dashboard",
         promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
         executeApproval: (approvalId) => runtime.executeApproval(approvalId),
       });
