@@ -5,6 +5,7 @@ import { loadConfig } from "./config.ts";
 import { ActivityLog } from "./activity.ts";
 import { ApprovalStore } from "./approval/store.ts";
 import { HenryMemory } from "./memory/engram.ts";
+import { KnowledgeBase } from "./knowledge/store.ts";
 import { HenryAgent } from "./agent/henry.ts";
 import { LunaOrchestrator } from "./orchestration/luna.ts";
 import { GmailService } from "./integrations/gmail.ts";
@@ -25,18 +26,25 @@ export class HenryRuntime {
   readonly reviewer: PullRequestReviewer;
   readonly jobs: JobApplicationService;
   readonly cover: CoverLetterService;
+  private _knowledge?: KnowledgeBase;
 
   private constructor(readonly config: HenryConfig) {
     this.activity = new ActivityLog(config.activityPath);
     this.approvals = new ApprovalStore(config.approvalsPath);
     this.memory = new HenryMemory(config, this.activity);
     this.gmail = new GmailService(config, this.activity, this.approvals);
-    this.agent = new HenryAgent(config, this.activity, this.memory);
+    this.agent = new HenryAgent(config, this.activity, this.memory, () => this.knowledge);
     this.luna = new LunaOrchestrator(config, this.activity, this.memory);
     this.scheduler = new WorkflowScheduler(config, this.activity, this.memory, this.gmail);
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
+  }
+
+  /** Lazily opens the GrowthX knowledge DB on first domain-relevant turn; keeps boot fast. */
+  get knowledge(): KnowledgeBase {
+    if (!this._knowledge) this._knowledge = new KnowledgeBase(this.config);
+    return this._knowledge;
   }
 
   static async create(rootDir?: string): Promise<HenryRuntime> {
@@ -108,5 +116,5 @@ export class HenryRuntime {
     };
   }
 
-  close(): void { this.memory.close(); this.scheduler.stop(); }
+  close(): void { this.memory.close(); this._knowledge?.close(); this.scheduler.stop(); }
 }
