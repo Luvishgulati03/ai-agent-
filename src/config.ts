@@ -15,6 +15,8 @@ export interface HenryConfig {
   approvalsPath: string;
   settingsPath: string;
   workflowsPath: string;
+  /** Directory holding markdown workflows (`*.workflow.md`) for the workflow engine. */
+  workflowsDir: string;
   host: string;
   port: number;
   dashboardToken?: string;
@@ -86,6 +88,7 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     approvalsPath: path.join(dataDir, "approvals.json"),
     settingsPath: path.join(dataDir, "settings.json"),
     workflowsPath: resolveFromRoot(rootDir, env("WORKFLOWS_PATH"), "workflows/defaults.json"),
+    workflowsDir: resolveFromRoot(rootDir, env("WORKFLOWS_DIR"), "workflows"),
     host: env("HOST") || "127.0.0.1",
     port: Number(env("PORT") || 7337),
     dashboardToken: env("DASHBOARD_TOKEN") || undefined,

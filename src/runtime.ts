@@ -14,6 +14,7 @@ import { PullRequestReviewer } from "./pr/review.ts";
 import { JobApplicationService } from "./jobs/service.ts";
 import { CoverLetterService } from "./jobs/cover.ts";
 import { ResumeEditorService } from "./jobs/resume-editor.ts";
+import { WorkflowEngine } from "./workflows/engine.ts";
 import type { ProviderName, RunResult } from "./types.ts";
 
 export class HenryRuntime {
@@ -29,6 +30,7 @@ export class HenryRuntime {
   readonly cover: CoverLetterService;
   readonly resumeEditor: ResumeEditorService;
   private _knowledge?: KnowledgeBase;
+  private _workflowEngine?: WorkflowEngine;
 
   private constructor(readonly config: HenryConfig) {
     this.activity = new ActivityLog(config.activityPath);
@@ -48,6 +50,15 @@ export class HenryRuntime {
   get knowledge(): KnowledgeBase {
     if (!this._knowledge) this._knowledge = new KnowledgeBase(this.config);
     return this._knowledge;
+  }
+
+  /**
+   * Markdown workflow engine (`workflows/*.workflow.md`). Constructed on first use and
+   * inert until `start()` — only the workflow/schedule daemons watch files and arm crons.
+   */
+  get workflowEngine(): WorkflowEngine {
+    if (!this._workflowEngine) this._workflowEngine = new WorkflowEngine(this.config, this.activity, this.agent.providerRunner);
+    return this._workflowEngine;
   }
 
   static async create(rootDir?: string): Promise<HenryRuntime> {
@@ -119,5 +130,5 @@ export class HenryRuntime {
     };
   }
 
-  close(): void { this.memory.close(); this._knowledge?.close(); this.scheduler.stop(); }
+  close(): void { this.memory.close(); this._knowledge?.close(); this.scheduler.stop(); this._workflowEngine?.stop(); }
 }

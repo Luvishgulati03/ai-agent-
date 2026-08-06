@@ -187,10 +187,49 @@ async function main(): Promise<void> {
       const sub = args[1] || "list";
       if (sub === "list") print(await runtime.scheduler.definitions());
       else if (sub === "run") { const id = args[2]; const definition = (await runtime.scheduler.definitions()).find((item) => item.id === id); if (!definition) throw new Error(`Workflow not found: ${id}`); print(await runtime.scheduler.run(definition)); }
-      else if (sub === "daemon") { await runtime.scheduler.start(); keepAlive = true; console.log("Henry scheduler is running. Press Ctrl+C to stop."); }
+      else if (sub === "daemon") {
+        // One daemon serves both engines: legacy JSON kinds and markdown workflows.
+        await runtime.scheduler.start();
+        const armed = await runtime.workflowEngine.start();
+        keepAlive = true;
+        console.log(`Henry scheduler is running (${armed.length} markdown workflow schedules armed). Press Ctrl+C to stop.`);
+      }
       else if (sub === "install") { const definitions = await runtime.scheduler.definitions(); print({ cron: await writeCronFile(runtime.config, definitions), launchd: await writeLaunchdPlist(runtime.config, definitions), note: "Review the generated files before installing them into your user scheduler." }); }
       else throw new Error("Usage: henry schedule list|run <id>|daemon|install");
-    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule");
+    } else if (command === "workflow") {
+      const sub = args[1] || "list";
+      if (sub === "list") {
+        const workflows = await runtime.workflowEngine.load();
+        print(workflows.map((workflow) => ({
+          name: workflow.name,
+          enabled: workflow.enabled,
+          description: workflow.description,
+          triggers: workflow.triggers.map((trigger) => trigger.type === "schedule" ? `schedule ${trigger.cron}${trigger.timezone ? ` ${trigger.timezone}` : ""}` : `command ${trigger.command}`),
+          output: workflow.outputs.find((output) => output.type === "docs")?.path,
+        })));
+        const problems = runtime.workflowEngine.registry.problems();
+        if (Object.keys(problems).length) print({ invalid: problems });
+      } else if (sub === "show") {
+        if (!args[2]) throw new Error("Usage: henry workflow show <name>");
+        await runtime.workflowEngine.load();
+        const workflow = runtime.workflowEngine.get(args[2]);
+        if (!workflow) throw new Error(`Workflow not found: ${args[2]}`);
+        print(workflow);
+      } else if (sub === "run") {
+        if (!args[2]) throw new Error("Usage: henry workflow run <name>");
+        print(await runtime.workflowEngine.run(args[2], "cli"));
+      } else if (sub === "logs") {
+        if (!args[2]) throw new Error("Usage: henry workflow logs <name>");
+        const artifacts = await runtime.workflowEngine.artifacts(args[2]);
+        print({ workflow: args[2], runs: artifacts });
+        if (artifacts[0]) { console.log(`\n--- ${artifacts[0]} ---\n`); console.log(await fs.readFile(artifacts[0], "utf8")); }
+      } else if (sub === "daemon") {
+        const armed = await runtime.workflowEngine.start();
+        keepAlive = true;
+        print({ armed });
+        console.log("Henry workflow engine is running. Press Ctrl+C to stop.");
+      } else throw new Error("Usage: henry workflow list|show <name>|run <name>|logs <name>|daemon");
+    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow");
   } finally {
     if (!keepAlive) runtime.close();
   }
