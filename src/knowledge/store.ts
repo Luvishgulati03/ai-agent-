@@ -3,7 +3,7 @@ import path from "node:path";
 import { Engram } from "engram-memory";
 import type { RecallResult } from "engram-memory";
 import type { HenryConfig } from "../config.ts";
-import { LocalEmbeddingProvider } from "./embeddings.ts";
+import { LocalEmbeddingProvider } from "../embeddings.ts";
 
 export const KNOWLEDGE_DOMAINS = [
   "gtm", "growth-strategy", "product-management", "software-development",

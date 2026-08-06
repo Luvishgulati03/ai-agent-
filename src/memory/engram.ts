@@ -5,13 +5,16 @@ import { Engram } from "engram-memory";
 import type { GraphExport, RecallResult } from "engram-memory";
 import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
+import { LocalEmbeddingProvider } from "../embeddings.ts";
 
 export class HenryMemory {
   readonly engine: Engram;
+  private readonly embeddingMarkerPath: string;
 
   constructor(private readonly config: HenryConfig, private readonly activity: ActivityLog) {
     mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
-    this.engine = new Engram({ dbPath: config.dbPath, defaultK: 8 });
+    this.engine = new Engram({ dbPath: config.dbPath, defaultK: 8, embedding: new LocalEmbeddingProvider() });
+    this.embeddingMarkerPath = path.join(config.dataDir, ".memory-embedding");
   }
 
   async init(): Promise<void> {
@@ -23,6 +26,39 @@ export class HenryMemory {
     await fs.chmod(this.config.dbPath, 0o600).catch(() => undefined);
     await fs.chmod(`${this.config.dbPath}-wal`, 0o600).catch(() => undefined);
     await fs.chmod(`${this.config.dbPath}-shm`, 0o600).catch(() => undefined);
+    await this.checkEmbeddingProviderMarker();
+  }
+
+  /**
+   * Migration note: personal memory moved from Engram's default offline hashing
+   * embedder to the local bge-small-en-v1.5 model. Vectors from the two
+   * providers live in different spaces and are never comparable, but
+   * engram-memory (as of node_modules/engram-memory/dist/engram.d.ts) doesn't
+   * expose an aggregate "does the stored index match the active provider"
+   * check — StoreStats/IndexResult report counts and the current run's model,
+   * not what's already on disk. MemoryRecord.embeddingModel IS stored
+   * per-row, so a future engram-memory release could add a real mismatch
+   * check; until then this is a one-time manual step: after upgrading the
+   * provider, run `henry memory index --fresh` once to wipe and re-embed
+   * data/engram.db with the new model. We track the last-known-active
+   * provider ourselves via a marker file (data/.memory-embedding) and warn
+   * at startup if memories exist but were indexed under a different provider.
+   */
+  private async checkEmbeddingProviderMarker(): Promise<void> {
+    const currentProvider = this.engine.embedding.name;
+    const stats = this.engine.stats();
+    if (stats.count > 0) {
+      const previous = await fs.readFile(this.embeddingMarkerPath, "utf8").catch(() => null);
+      if (previous !== null && previous.trim() !== currentProvider) {
+        console.warn(
+          `Henry memory: embedding provider changed (was "${previous.trim()}", now "${currentProvider}"). ` +
+          `Existing vectors in ${this.config.dbPath} were embedded with the old provider and won't recall well ` +
+          `against new queries. Run \`henry memory index --fresh\` once to re-embed.`,
+        );
+      }
+    }
+    await fs.writeFile(this.embeddingMarkerPath, currentProvider, "utf8").catch(() => undefined);
+    await fs.chmod(this.embeddingMarkerPath, 0o600).catch(() => undefined);
   }
 
   async recall(query: string, k = 8): Promise<RecallResult[]> {
