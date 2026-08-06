@@ -8,7 +8,18 @@ This file is the durable handoff for any other agentic IDE, model, or engineer w
 
 The complete architecture & roadmap plan (memory flagship, dev workflows, E2E stacks, capability roadmap, M1 resource policy, dashboard spec, open-source plan, build phases) is in **`docs/MASTER_PLAN.md`** (2026-08-06). Read it before starting any new phase; it supersedes the "next recommended phases" list at the bottom of this file.
 
-## Latest handoff — 2026-08-06 (night) — full build day complete, 33 commits pushed
+## Latest handoff — 2026-08-07 (~00:30) — Gmail-MCP live, mailwatch, hologram, notifications SOLVED
+
+Additions after the night handoff below (all pushed, 47 commits total on personal/main):
+- **Gmail via Codex MCP, PROVEN**: user's Codex CLI has @gongrzhe/server-gmail-autoauth-mcp registered+authed; Henry's brain reads inbox natively in conversation (live-verified through ProviderRunner AND `henry ask`). claude -p has NO gmail tools (claude.ai connector does not propagate — probed twice, definitive). Hard rail in agent prompt: MCP may READ + DRAFT only; sending stays approval-queue-only. Docs: docs/modules/gmail.md is MCP-first now.
+- **Job-mail watcher** (src/mailwatch/): every 45min (workflows/defaults.json job-mail-watch, scheduler kind mail.watch, pid-locked) the codex brain scans inbox read-only for shortlisting/interview/offer/recruiter mail → dedupes (data/mailwatch.json, re-read before write) → notifies via notifyOperator. Live proof caught a real Naukri/AmEx recruiter email. CLI: henry mailwatch check|status.
+- **Telegram path built, NOT yet connected**: src/notify/telegram.ts (operator-only scope guard), henry telegram test, docs/modules/telegram.md; .env keys HENRY_TELEGRAM_BOT_TOKEN/CHAT_ID empty — DAD'S NEXT-SESSION TASK: BotFather /newbot → fill keys → henry telegram test.
+- **macOS notifications SOLVED**: root cause = osascript banners die silently unless the sender app is registered; Sleep Focus also eats them. Fix: brew terminal-notifier (registered + permission granted by Dad, CONFIRMED SHOWING) — notifyReminder prefers it, osascript fallback. REPL delivery now composed: terminal 🔔 + banner + telegram.
+- **Memory Observatory** (Dad's designer template) live at /memory with real Engram data (21 nodes verified in-browser); **JARVIS 3D hologram** replaced the flat dashboard graph panel (holo.js served at /holo.js; orbit/zoom/hover/boot animation; evidence-verified incl. rotation pixel-diffs). Restart dashboard to serve new assets.
+- Reminders: PROMPT_NO_NOTIFICATION sentinel for silent prompt-checks; cross-process cache-clobber fixed (always re-read); firing ownership lock (REPL outranks dashboard/daemon — data/reminder-ticker.lock).
+- Orchestrator QA doctrine hardened (saved in auto-memory): acceptance criteria + action budgets in every dispatch; independent verification (headless-browser for UI, node --check for generated scripts, live two-process tests) before any commit — two bugs escaped worker self-verification tonight (dashboard quote-escaping syntax error killing ALL page JS since day one; ticker firing steal).
+
+## Previous handoff — 2026-08-06 (night) — full build day complete, 33 commits pushed
 
 All work is committed AND pushed to `personal` = `github.com/Luvishgulati03/ai-agent-` (33 commits on main). Working copy: `~/dev/henry`. Suite: 111/111 tests, tsc clean, build emits.
 
