@@ -22,6 +22,7 @@ import { ReminderService, notifyReminder, type ReminderNotifier } from "./remind
 import { LinkedInDraftService } from "./social/linkedin.ts";
 import { sendTelegram } from "./notify/telegram.ts";
 import { MailWatchService } from "./mailwatch/service.ts";
+import { DraftRepliesService } from "./gmail-drafts/service.ts";
 import type { ProviderName, RunResult } from "./types.ts";
 
 export class HenryRuntime {
@@ -42,6 +43,7 @@ export class HenryRuntime {
   readonly reminders: ReminderService;
   readonly linkedin: LinkedInDraftService;
   readonly mailwatch: MailWatchService;
+  readonly draftReplies: DraftRepliesService;
   private _knowledge?: KnowledgeBase;
   private _workflowEngine?: WorkflowEngine;
 
@@ -71,6 +73,7 @@ export class HenryRuntime {
       (approvalId) => this.executeApproval(approvalId),
     );
     this.mailwatch = new MailWatchService(config, this.activity, this.agent.providerRunner, this.notifyOperator);
+    this.draftReplies = new DraftRepliesService(config, this.activity, this.agent.providerRunner, this.notifyOperator);
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);

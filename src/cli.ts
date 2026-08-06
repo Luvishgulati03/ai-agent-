@@ -9,6 +9,7 @@ import { writeCronFile, writeLaunchdPlist } from "./scheduler/install.ts";
 import { parseAt, parseIn, type ReminderKind } from "./reminders/service.ts";
 import { startReminderTicker, type ReminderTickerHandle } from "./reminders/ticker.ts";
 import { sendTelegram } from "./notify/telegram.ts";
+import { createInputQueue } from "./repl/input-queue.ts";
 
 const args = process.argv.slice(2);
 
@@ -29,34 +30,101 @@ function print(value: unknown): void {
   if (typeof value === "string") console.log(value); else console.log(JSON.stringify(value, null, 2));
 }
 
+const REPL_HELP = ":status  :dashboard  :memory <query>  :provider [codex|claude]  :quit";
+
+/**
+ * Friday-style buffer-and-drain REPL: while an agent turn is in flight (queue.busy), new
+ * lines are buffered instead of racing it. Only `:help`/`:dashboard` are "trivially safe"
+ * enough to answer instantly even while busy — everything else (including `:status`/
+ * `:memory`/`:provider`) buffers as raw text and, on drain, is sent to the agent as one
+ * combined turn (the pure buffering logic lives in `src/repl/input-queue.ts`, testable
+ * without readline).
+ */
 async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle, setRedraw?: (fn: () => void) => void): Promise<void> {
   const rl = readline.createInterface({ input, output, prompt: "henry> " });
   // Reminders fired by the in-process ticker print here, above the prompt.
   setRedraw?.(() => rl.prompt(true));
   console.log("Henry is ready, Dad. Type :help for commands or ask normally.\n");
-  rl.prompt();
-  for await (const line of rl) {
-    const value = line.trim();
-    if (!value) { rl.prompt(); continue; }
-    if (value === ":quit" || value === ":exit") break;
-    if (value === ":help") { console.log(":status  :dashboard  :memory <query>  :provider [codex|claude]  :quit"); rl.prompt(); continue; }
+
+  const queue = createInputQueue();
+  let quitting = false;
+
+  async function runAgentTurn(value: string, label?: string): Promise<void> {
+    const spinner = setInterval(() => process.stdout.write("."), 3000);
+    process.stdout.write("henry is thinking");
     try {
-      if (value === ":status") print(await runtime.status());
-      else if (value === ":dashboard") console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`);
-      else if (value.startsWith(":memory ")) print(await runtime.memory.recall(value.slice(8)));
-      else if (value === ":provider") console.log(`Primary provider: ${runtime.config.provider}`);
-      else if (value.startsWith(":provider ")) console.log(`Primary provider set to ${await runtime.setProvider(value.slice(10).trim() as "codex" | "claude")}`);
-      else {
-        const spinner = setInterval(() => process.stdout.write("."), 3000);
-        process.stdout.write("henry is thinking");
-        try { const result = await runtime.agent.run(value); console.log(); print(result.response); }
-        finally { clearInterval(spinner); }
-      }
-    } catch (error) { console.error(error instanceof Error ? error.message : String(error)); }
+      const result = await runtime.agent.run(value);
+      console.log();
+      if (label) console.log(label);
+      print(result.response);
+    } catch (error) {
+      console.log();
+      console.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      clearInterval(spinner);
+    }
+  }
+
+  // Ends the current run; if lines queued up while it was thinking, drains them into ONE
+  // combined follow-up turn (recursing until the queue is empty), then prompts or exits.
+  async function afterRun(): Promise<void> {
+    const drained = queue.finish();
+    if (drained) {
+      const label = drained.count > 1 ? `(answering ${drained.count} queued messages)` : undefined;
+      queue.start();
+      await runAgentTurn(drained.combined, label);
+      await afterRun();
+      return;
+    }
+    if (quitting) { rl.close(); return; }
     rl.prompt();
   }
-  rl.close();
-  reminderTicker?.stop(); // never let the poll interval keep the process alive after the REPL exits
+
+  rl.prompt();
+  rl.on("line", (line) => {
+    const value = line.trim();
+    if (quitting) return; // ignore stray input after :quit was requested
+    if (!value) { if (!queue.busy) rl.prompt(); return; }
+
+    if (queue.busy) {
+      if (value === ":help") { console.log(REPL_HELP); rl.prompt(true); return; }
+      if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); rl.prompt(true); return; }
+      if (value === ":quit" || value === ":exit") {
+        quitting = true;
+        console.log("finishing current reply, then exiting…");
+        return;
+      }
+      const count = queue.push(value);
+      console.log(`\x1b[2m⏳ queued (${count}) — henry is still thinking\x1b[0m`);
+      rl.prompt(true);
+      return;
+    }
+
+    if (value === ":quit" || value === ":exit") { rl.close(); return; }
+    void (async () => {
+      try {
+        if (value === ":help") { console.log(REPL_HELP); rl.prompt(); return; }
+        if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); rl.prompt(); return; }
+        if (value === ":status") { print(await runtime.status()); rl.prompt(); return; }
+        if (value.startsWith(":memory ")) { print(await runtime.memory.recall(value.slice(8))); rl.prompt(); return; }
+        if (value === ":provider") { console.log(`Primary provider: ${runtime.config.provider}`); rl.prompt(); return; }
+        if (value.startsWith(":provider ")) { console.log(`Primary provider set to ${await runtime.setProvider(value.slice(10).trim() as "codex" | "claude")}`); rl.prompt(); return; }
+        queue.start();
+        await runAgentTurn(value);
+        await afterRun();
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        rl.prompt();
+      }
+    })();
+  });
+
+  await new Promise<void>((resolve) => {
+    rl.on("close", () => {
+      reminderTicker?.stop(); // never let the poll interval keep the process alive after the REPL exits
+      resolve();
+    });
+  });
 }
 
 async function main(): Promise<void> {
@@ -203,7 +271,16 @@ async function main(): Promise<void> {
         if (!to || !subject || !body) throw new Error("Usage: henry gmail draft --to email --subject subject --body body");
         const item = await runtime.gmail.queueEmail({ to, subject, body, threadId: option("--thread-id") });
         print({ message: "Saved locally and queued for Dad's approval", approvalId: item.id, dashboard: `http://${runtime.config.host}:${runtime.config.port}` });
-      } else throw new Error("Usage: henry gmail auth|inbox|draft|reply");
+      } else if (sub === "draftreplies") {
+        const limit = Number(option("--limit")) || 5;
+        const result = await runtime.draftReplies.draftReplies(limit);
+        print({
+          drafted: result.drafted,
+          skipped: result.skipped,
+          localPath: result.localPath,
+          message: result.drafted.length ? `Drafted ${result.drafted.length} replies — review in Gmail drafts` : "No replies needed",
+        });
+      } else throw new Error("Usage: henry gmail auth|inbox|draft|reply|draftreplies");
     } else if (command === "review") {
       const target = args[1];
       if (!target) throw new Error("Usage: henry review <pr-number-or-url> [--cwd path] [--repo owner/name]");
@@ -284,7 +361,7 @@ async function main(): Promise<void> {
       if (sub === "list") {
         print((await runtime.reminders.list()).map((item) => ({
           id: item.id, text: item.text, kind: item.kind, dueAt: item.dueAt, cron: item.cron,
-          nextFireAt: item.nextFireAt, approvalId: item.approvalId, status: item.status,
+          randomDaily: item.randomDaily, nextFireAt: item.nextFireAt, approvalId: item.approvalId, status: item.status,
         })));
       } else if (sub === "cancel") {
         if (!args[2]) throw new Error("Usage: henry remind cancel <id>");
@@ -294,6 +371,7 @@ async function main(): Promise<void> {
         const at = option("--at");
         const inValue = option("--in");
         const every = option("--every");
+        const randomDailyValue = option("--random-daily");
         if (executeApprovalId) {
           if (every) throw new Error("henry remind --execute-approval does not support --every — a scheduled send is one-shot, never recurring.");
           if (!at && !inValue) throw new Error('Usage: henry remind --execute-approval <approvalId> --at "YYYY-MM-DD HH:mm" | --in "2h"');
@@ -304,11 +382,16 @@ async function main(): Promise<void> {
           const promptText = option("--prompt");
           const text = promptText || (sub && !sub.startsWith("--") ? sub : undefined);
           const kind: ReminderKind = promptText ? "prompt" : "message";
-          const usage = 'Usage: henry remind "<text>" --at "YYYY-MM-DD HH:mm" | --in "2h" | --every "<cron>"  (or: henry remind --prompt "<instruction>" --at|--in|--every ...  or: henry remind --execute-approval <id> --at|--in ...)';
-          if (!text || (!at && !inValue && !every)) throw new Error(usage);
-          const reminder = every
-            ? await runtime.reminders.createRecurring(text, every, kind)
-            : await runtime.reminders.create(text, at ? parseAt(at) : parseIn(inValue!), kind);
+          const usage = 'Usage: henry remind "<text>" --at "YYYY-MM-DD HH:mm" | --in "2h" | --every "<cron>" | --random-daily 5  (or: henry remind --prompt "<instruction>" --at|--in|--every|--random-daily ...)';
+          if (!text || (!at && !inValue && !every && !randomDailyValue)) throw new Error(usage);
+          if (randomDailyValue && (at || inValue || every)) throw new Error("--random-daily cannot be combined with --at, --in, or --every");
+          const randomCount = randomDailyValue ? Number(randomDailyValue) : undefined;
+          if (randomDailyValue && (randomCount === undefined || !Number.isInteger(randomCount) || randomCount < 1)) throw new Error("--random-daily requires a positive integer count");
+          const reminder = randomDailyValue
+            ? await runtime.reminders.createRandomDaily(text, randomCount, kind)
+            : every
+              ? await runtime.reminders.createRecurring(text, every, kind)
+              : await runtime.reminders.create(text, at ? parseAt(at) : parseIn(inValue!), kind);
           print({ id: reminder.id, text: reminder.text, kind: reminder.kind, dueAt: reminder.dueAt, cron: reminder.cron, nextFireAt: reminder.nextFireAt, status: reminder.status });
         }
       }

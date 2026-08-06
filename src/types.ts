@@ -30,7 +30,8 @@ export type ActivityKind =
   | "provider.switched"
   | "task.started"
   | "task.completed"
-  | "social.drafted";
+  | "social.drafted"
+  | "gmail.drafted";
 
 export interface ActivityEvent {
   id: string;

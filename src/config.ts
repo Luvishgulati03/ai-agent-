@@ -49,6 +49,9 @@ export interface HenryConfig {
   telegramBotToken?: string;
   telegramChatId?: string;
   mailwatchPath: string;
+  /** Today's randomized check-times plan (§ mailwatch tick planner) — separate file so a corrupt/racy write never touches the dedupe state in `mailwatchPath`. */
+  mailwatchPlanPath: string;
+  draftRepliesDir: string;
 }
 
 const thisFile = fileURLToPath(import.meta.url);
@@ -127,5 +130,7 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     telegramBotToken: env("TELEGRAM_BOT_TOKEN") || undefined,
     telegramChatId: env("TELEGRAM_CHAT_ID") || undefined,
     mailwatchPath: path.join(dataDir, "mailwatch.json"),
+    mailwatchPlanPath: path.join(dataDir, "mailwatch-plan.json"),
+    draftRepliesDir: path.join(dataDir, "drafts"),
   };
 }
