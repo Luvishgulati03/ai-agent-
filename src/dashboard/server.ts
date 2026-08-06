@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { DASHBOARD_HTML } from "./page.ts";
 import { KnowledgeBase } from "../knowledge/store.ts";
 import { sampleResources } from "./resources.ts";
@@ -50,6 +51,20 @@ function startKnowledgeInit(runtime: HenryRuntime): void {
   });
 }
 
+// The Memory Observatory is a ~2k-line designer-authored page. It is served
+// from disk rather than embedded in page.ts's template literal: that literal
+// already produced a page-killing escaping bug once, and a standalone .html
+// keeps backticks/${...}/backslashes in the designer's markup harmless. Read
+// once, then cached for the process lifetime (the file never changes at run
+// time); a read failure is not cached, so a fixed file recovers on next hit.
+const OBSERVATORY_HTML_PATH = fileURLToPath(new URL("./observatory.html", import.meta.url));
+let observatoryHtmlCache: string | null = null;
+
+async function observatoryHtml(): Promise<string> {
+  observatoryHtmlCache ??= await fs.readFile(OBSERVATORY_HTML_PATH, "utf8");
+  return observatoryHtmlCache;
+}
+
 function json(response: http.ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   response.end(JSON.stringify(value));
@@ -89,6 +104,11 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
       const url = new URL(request.url || "/", `http://${runtime.config.host}:${runtime.config.port}`);
       if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" }); response.end(DASHBOARD_HTML); return;
+      }
+      if (request.method === "GET" && (url.pathname === "/memory" || url.pathname === "/memory/")) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+        response.end(await observatoryHtml());
+        return;
       }
       if (request.method === "GET" && url.pathname === "/api/health") { json(response, 200, { ok: true, timestamp: new Date().toISOString() }); return; }
       if (request.method === "GET" && url.pathname === "/api/status") { json(response, 200, await runtime.status()); return; }

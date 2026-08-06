@@ -8,6 +8,7 @@ export const DASHBOARD_HTML = `<!doctype html>
 .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--line);color:var(--muted);width:fit-content}.badge.normal{color:var(--good);border-color:var(--good)}.badge.warn{color:var(--warn);border-color:var(--warn)}.badge.critical{color:var(--bad);border-color:var(--bad)}
 #sparkline{display:block;background:#0f131a;border:1px solid var(--line);border-radius:8px}
 #graph-wrap{position:relative;width:100%;height:440px;border-radius:10px;overflow:hidden;background:#05070c;border:1px solid var(--line)}#graph-canvas{width:100%;height:100%;display:block}#graph-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:13px}.graph-tooltip{position:absolute;pointer-events:none;background:#151a24f0;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text);opacity:0;transform:translate(-50%,-100%);transition:opacity .12s;white-space:nowrap;z-index:5}#graph-note{font-size:11px;margin-top:6px}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}.panel-head h2{margin:0 0 12px}.observatory-link{color:var(--accent);text-decoration:none;font-size:12px;font-weight:600;letter-spacing:.03em;border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}.observatory-link:hover{border-color:var(--accent);background:#242c3a}
 @media(max-width:900px){.wide,.side{grid-column:1/-1}}
 </style></head><body><main><header><div><h1>🌙 Henry</h1><div class="sub">Luna-orchestrated terminal agent · Dad's control room</div></div><div class="controls"><div class="seg" title="Primary provider"><button id="prov-codex" onclick="setProvider('codex')">Codex</button><button id="prov-claude" onclick="setProvider('claude')">Claude</button></div><button onclick="refresh()">Refresh</button></div></header>
 <section class="panel hero" id="hero">
@@ -26,7 +27,7 @@ export const DASHBOARD_HTML = `<!doctype html>
 <div class="panel wide"><h2>Activity</h2><div id="activity" class="scroll"></div></div>
 <div class="panel side"><h2>Approval queue</h2><div id="approvals" class="scroll"></div></div>
 <div class="panel full"><h2>Job applications</h2><div id="jobstats" style="margin-bottom:10px"></div><div id="jobs" class="scroll"></div></div>
-<div class="panel full"><h2>Neural link &middot; memory graph</h2><div id="graph-wrap"><canvas id="graph-canvas"></canvas><div id="graph-tooltip" class="graph-tooltip"></div><div id="graph-empty">memory graph is empty</div></div><div id="graph-note" class="muted"></div></div>
+<div class="panel full"><div class="panel-head"><h2>Neural link &middot; memory graph</h2><a class="observatory-link" href="/memory" target="_blank" rel="noopener">Open Memory Observatory &rarr;</a></div><div id="graph-wrap"><canvas id="graph-canvas"></canvas><div id="graph-tooltip" class="graph-tooltip"></div><div id="graph-empty">memory graph is empty</div></div><div id="graph-note" class="muted"></div></div>
 <div class="panel side"><h2>Knowledge base</h2><div id="knowledge"></div></div>
 <div class="panel side"><h2>Cover letters</h2><div id="covers" class="scroll"></div></div></section></main>
 <script>
