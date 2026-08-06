@@ -28,8 +28,10 @@ function print(value: unknown): void {
   if (typeof value === "string") console.log(value); else console.log(JSON.stringify(value, null, 2));
 }
 
-async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle): Promise<void> {
+async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle, setRedraw?: (fn: () => void) => void): Promise<void> {
   const rl = readline.createInterface({ input, output, prompt: "henry> " });
+  // Reminders fired by the in-process ticker print here, above the prompt.
+  setRedraw?.(() => rl.prompt(true));
   console.log("Henry is ready, Dad. Type :help for commands or ask normally.\n");
   rl.prompt();
   for await (const line of rl) {
@@ -67,11 +69,14 @@ async function main(): Promise<void> {
       print((await runtime.agent.run(prompt, { provider: option("--provider") as "codex" | "claude" | undefined })).response);
     } else if (command === "repl") {
       keepAlive = true;
+      let redrawPrompt: () => void = () => {};
       const ticker = startReminderTicker(runtime.reminders, runtime.activity, {
+        // Terminal-first delivery: the message lands IN the REPL, cleanly above the prompt.
+        notify: async (message) => { process.stdout.write(`\n\u{1F514} ${message}\n`); redrawPrompt(); },
         promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
         executeApproval: (approvalId) => runtime.executeApproval(approvalId),
       });
-      await repl(runtime, ticker);
+      await repl(runtime, ticker, (fn) => { redrawPrompt = fn; });
     } else if (command === "dashboard") {
       startDashboard(runtime); keepAlive = true;
       startReminderTicker(runtime.reminders, runtime.activity, {
