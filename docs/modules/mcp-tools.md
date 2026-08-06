@@ -39,6 +39,13 @@ of the CLI's own config (`~/.claude.json` / `.mcp.json` for Claude,
 ## 2. Three concrete examples
 
 ```bash
+# Gmail — proven working via Codex's own MCP config, NOT via a claude.ai connector:
+# the user's `codex mcp add gmail -- npx @gongrzhe/server-gmail-autoauth-mcp` is
+# registered+authenticated, so `codex exec` (Henry's codex provider path) reads the
+# real inbox natively. Empirically, a claude.ai Gmail connector does NOT propagate
+# into `claude -p` tool calls (verified twice) — `claude -p` has zero Gmail tools
+# today; see docs/modules/gmail.md §2 for the read/draft-only hard rule this implies.
+
 # Calendar — via a claude.ai connector (no CLI flag needed):
 # claude.ai -> Settings -> Connectors -> enable "Google Calendar"
 # any subsequent `claude -p "what's on my calendar tomorrow?"` can use it directly.
