@@ -13,6 +13,7 @@ import { WorkflowScheduler } from "./scheduler/scheduler.ts";
 import { PullRequestReviewer } from "./pr/review.ts";
 import { JobApplicationService } from "./jobs/service.ts";
 import { CoverLetterService } from "./jobs/cover.ts";
+import { ResumeEditorService } from "./jobs/resume-editor.ts";
 import type { ProviderName, RunResult } from "./types.ts";
 
 export class HenryRuntime {
@@ -26,6 +27,7 @@ export class HenryRuntime {
   readonly reviewer: PullRequestReviewer;
   readonly jobs: JobApplicationService;
   readonly cover: CoverLetterService;
+  readonly resumeEditor: ResumeEditorService;
   private _knowledge?: KnowledgeBase;
 
   private constructor(readonly config: HenryConfig) {
@@ -39,6 +41,7 @@ export class HenryRuntime {
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
+    this.resumeEditor = new ResumeEditorService(config, this.activity, this.memory, this.agent.providerRunner);
   }
 
   /** Lazily opens the GrowthX knowledge DB on first domain-relevant turn; keeps boot fast. */

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { HenryRuntime } from "./runtime.ts";
 import { startDashboard } from "./dashboard/server.ts";
@@ -108,6 +109,19 @@ async function main(): Promise<void> {
         if (!input) throw new Error("Usage: henry cover <job-url | jd-file | jd-text>  (or: henry cover import <resume-file>)");
         print(await runtime.cover.generate(input));
       }
+    } else if (command === "resume") {
+      const sub = args[1];
+      if (sub === "edit") {
+        const instructions = args.slice(2).filter((item) => !item.startsWith("--")).join(" ");
+        if (!instructions) throw new Error("Usage: henry resume edit <instructions...>");
+        print(await runtime.resumeEditor.edit(instructions));
+      } else if (sub === "promote") {
+        if (!args[2]) throw new Error("Usage: henry resume promote <markdown-path>");
+        print({ resumePath: await runtime.resumeEditor.promote(args[2]) });
+      } else if (sub === "show") {
+        const text = await fs.readFile(runtime.config.resumeSourcePath, "utf8").catch(() => "");
+        print({ resumePath: runtime.config.resumeSourcePath, preview: text.split(/\r?\n/).slice(0, 10).join("\n") });
+      } else throw new Error("Usage: henry resume edit <instructions...>|promote <markdown-path>|show");
     } else if (command === "knowledge") {
       const { KnowledgeBase } = await import("./knowledge/store.ts");
       const kb = new KnowledgeBase(runtime.config);
@@ -176,7 +190,7 @@ async function main(): Promise<void> {
       else if (sub === "daemon") { await runtime.scheduler.start(); keepAlive = true; console.log("Henry scheduler is running. Press Ctrl+C to stop."); }
       else if (sub === "install") { const definitions = await runtime.scheduler.definitions(); print({ cron: await writeCronFile(runtime.config, definitions), launchd: await writeLaunchdPlist(runtime.config, definitions), note: "Review the generated files before installing them into your user scheduler." }); }
       else throw new Error("Usage: henry schedule list|run <id>|daemon|install");
-    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, memory, dispatch, gmail, review, approve, schedule");
+    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule");
   } finally {
     if (!keepAlive) runtime.close();
   }
