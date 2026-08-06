@@ -1,5 +1,12 @@
 export type ProviderName = "codex" | "claude";
 
+/**
+ * Dispatch tier (MASTER_PLAN §11.1): t0 = nano/triage, t1 = standard
+ * implementation, t2 = frontier reasoning. Subscription CLIs only — tiers map
+ * to CLI model/effort flags, never to API calls.
+ */
+export type DispatchTier = "t0" | "t1" | "t2";
+
 export type ActivityKind =
   | "run.started"
   | "run.completed"
