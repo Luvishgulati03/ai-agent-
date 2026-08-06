@@ -48,7 +48,7 @@ interface StrategyCard { claim: string; whenToUse: string; steps: string[]; evid
 interface ModuleDoc { _id: string | { $oid: string }; name: string }
 
 export interface IngestReport { entries: number; skipped: number; byDomain: Record<string, number> }
-export interface DistillReport { modules: number; cards: number; remaining: number }
+export interface DistillReport { modules: number; cards: number; remaining: number; failed: number }
 
 /**
  * Load modules.json into a Map<moduleId, moduleName> for resolution.
@@ -143,9 +143,17 @@ export class KnowledgeIngestor {
     return report;
   }
 
-  /** Distills up to `limit` modules into strategy cards per run (checkpointed; resumes where it left off). */
-  async ingestCards(options: { limit?: number } = {}): Promise<DistillReport> {
+  /**
+   * Distills up to `limit` modules into strategy cards per run (checkpointed; resumes where it left off).
+   * Provider calls for distinct modules run concurrently via a simple promise-pool; the checkpoint
+   * (`done` Set + file write) is serialized through an in-process mutex so concurrent workers never
+   * interleave writes, and a per-module try/catch keeps one failure from aborting the rest of the batch.
+   */
+  async ingestCards(options: { limit?: number; concurrency?: number } = {}): Promise<DistillReport> {
     const limit = options.limit ?? 3;
+    // M1 8GB resource policy (MASTER_PLAN §7): never run more than 3 concurrent provider workers,
+    // even if a caller asks for more.
+    const concurrency = Math.min(options.concurrency ?? 3, 3);
     await fs.mkdir(this.cardsDir, { recursive: true, mode: 0o700 });
     const checkpointPath = path.join(this.cardsDir, ".distilled.json");
     const done = new Set<string>(JSON.parse(await fs.readFile(checkpointPath, "utf8").catch(() => "[]")) as string[]);
@@ -156,8 +164,20 @@ export class KnowledgeIngestor {
       byModule.get(key)!.push(entry);
     }
     const pending = [...byModule.entries()].filter(([key]) => !done.has(key));
-    const report: DistillReport = { modules: 0, cards: 0, remaining: Math.max(0, pending.length - limit) };
-    for (const [key, moduleEntries] of pending.slice(0, limit)) {
+    const batch = pending.slice(0, limit);
+    const report: DistillReport = { modules: 0, cards: 0, remaining: Math.max(0, pending.length - limit), failed: 0 };
+
+    // Serializes checkpoint mutations across concurrent workers — same promise-chain mutex
+    // pattern as ApprovalStore.mutate() (src/approval/store.ts).
+    let checkpointChain = Promise.resolve();
+    const withCheckpointLock = <T>(operation: () => Promise<T>): Promise<T> => {
+      const previous = checkpointChain;
+      let release!: () => void;
+      checkpointChain = new Promise<void>((resolve) => { release = resolve; });
+      return previous.then(operation, operation).finally(release);
+    };
+
+    const processModule = async ([key, moduleEntries]: [string, KnowledgeEntry[]]): Promise<void> => {
       const module = String(moduleEntries[0].metadata.module);
       const domain = String(moduleEntries[0].metadata.domain);
       const corpus = moduleEntries.map((entry) => entry.content).join("\n\n").slice(0, 60_000);
@@ -167,29 +187,52 @@ export class KnowledgeIngestor {
         'Return ONLY a JSON array: [{"claim":string,"whenToUse":string,"steps":string[],"evidence":string}]',
         `\n--- module: ${module} ---\n${corpus}`,
       ].join("\n");
-      const result = await this.runner.run(prompt, { role: "knowledge-distill", readOnly: true });
-      if (result.exitCode !== 0) continue;
-      let cards: StrategyCard[] = [];
       try {
-        const fenced = result.response.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || result.response;
-        cards = (JSON.parse(fenced.slice(fenced.indexOf("["), fenced.lastIndexOf("]") + 1)) as StrategyCard[]).filter((card) => card.claim);
-      } catch { continue; }
-      const cardFile = path.join(this.cardsDir, `${key.replace(/[^a-zA-Z0-9-]/g, "-")}.md`);
-      const rendered = cards.map((card) => `## ${card.claim}\n\n**When to use:** ${card.whenToUse}\n\n${card.steps.map((step) => `- ${step}`).join("\n")}\n\n**Evidence:** ${card.evidence}`).join("\n\n");
-      await fs.writeFile(cardFile, `# ${module} — strategy cards\n\n${rendered}\n`, "utf8");
-      for (const card of cards) {
-        await this.kb.add({
-          content: `${card.claim}\nWhen to use: ${card.whenToUse}\nSteps: ${card.steps.join("; ")}\nEvidence: ${card.evidence}`,
-          source: `gx-learn/cards/${path.basename(cardFile)}`,
-          importance: 8,
-          metadata: { layer: "card", domain, module, moduleId: key },
+        // Provider call: the concurrent part of the pipeline. Not under any lock.
+        const result = await this.runner.run(prompt, { role: "knowledge-distill", readOnly: true });
+        if (result.exitCode !== 0) { report.failed += 1; return; }
+        let cards: StrategyCard[] = [];
+        try {
+          const fenced = result.response.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || result.response;
+          cards = (JSON.parse(fenced.slice(fenced.indexOf("["), fenced.lastIndexOf("]") + 1)) as StrategyCard[]).filter((card) => card.claim);
+        } catch { report.failed += 1; return; }
+        const cardFile = path.join(this.cardsDir, `${key.replace(/[^a-zA-Z0-9-]/g, "-")}.md`);
+        const rendered = cards.map((card) => `## ${card.claim}\n\n**When to use:** ${card.whenToUse}\n\n${card.steps.map((step) => `- ${step}`).join("\n")}\n\n**Evidence:** ${card.evidence}`).join("\n\n");
+        // File write is scoped to this module's own card file — safe to interleave across workers.
+        await fs.writeFile(cardFile, `# ${module} — strategy cards\n\n${rendered}\n`, "utf8");
+        for (const card of cards) {
+          // Engram/SQLite from one process tolerates interleaved awaits across workers.
+          await this.kb.add({
+            content: `${card.claim}\nWhen to use: ${card.whenToUse}\nSteps: ${card.steps.join("; ")}\nEvidence: ${card.evidence}`,
+            source: `gx-learn/cards/${path.basename(cardFile)}`,
+            importance: 8,
+            metadata: { layer: "card", domain, module, moduleId: key },
+          });
+          report.cards += 1;
+        }
+        // Checkpoint mutation: guarded so two workers never race on `done` or the file write.
+        await withCheckpointLock(async () => {
+          done.add(key);
+          report.modules += 1;
+          await fs.writeFile(checkpointPath, JSON.stringify([...done], null, 1), "utf8");
         });
-        report.cards += 1;
+      } catch {
+        // A single module's failure never aborts the rest of the batch.
+        report.failed += 1;
       }
-      done.add(key);
-      report.modules += 1;
-      await fs.writeFile(checkpointPath, JSON.stringify([...done], null, 1), "utf8");
-    }
+    };
+
+    // Simple promise-pool: up to `concurrency` workers pull the next pending module until the batch drains.
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < batch.length) {
+        const index = cursor;
+        cursor += 1;
+        await processModule(batch[index]);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, batch.length) }, () => worker()));
+
     await this.activity.record("memory.saved", `Distilled ${report.cards} strategy cards from ${report.modules} modules`, { ...report });
     return report;
   }
