@@ -1,0 +1,96 @@
+# Module: knowledge base
+
+**You are Claude Code, Codex, or another coding agent, reading this inside
+Henry's repo.** Already implemented at `src/knowledge/store.ts`,
+`src/knowledge/ingest.ts`, `src/knowledge/router.ts`, and
+`src/knowledge/adapters/gx-mongo.ts` — don't rebuild it. Configure and verify
+only.
+
+## 1. What it does
+
+A second, on-demand RAG store — deliberately separate from personal memory
+(`src/memory/engram.ts`): versioned and source-attributed, no decay/supersede
+lifecycle, injected only when a domain is detected in the prompt rather than
+every turn. It's a second `Engram` instance (`src/knowledge/store.ts`) pointed
+at its own SQLite file, using the same local (no-API-key) embeddings as
+personal memory.
+
+Commands it adds (`src/cli.ts`, `knowledge` branch):
+
+```
+henry knowledge export                    # GrowthX-specific: pulls raw corpus from a gx-backend Mongo instance
+henry knowledge index [--limit N]         # indexes knowledge/raw/{chunks.jsonl,transcripts/,texts/} with LOCAL embeddings, zero LLM calls
+henry knowledge distill [--limit N]       # LLM pass: raw chunks -> strategy cards (provider call per module, budgeted)
+henry knowledge search <query> [--domain gtm]
+henry knowledge context <query> [--domain gtm]
+henry knowledge stats
+```
+
+## 2. Configure
+
+Env keys (`.env`, read by `src/config.ts`):
+
+```
+HENRY_KNOWLEDGE_DIR=knowledge   # default shown; holds raw/ and cards/
+```
+
+No API key is required for `index`/`search`/`context`/`stats` — embeddings are
+local (`LocalEmbeddingProvider`). `distill` makes provider CLI calls (subscription
+auth, not a paid API), same as the rest of Henry.
+
+**Accuracy note on the corpus shape**: `henry knowledge index` does NOT ingest
+arbitrary markdown. `KnowledgeIngestor.collectRawEntries()` reads exactly:
+- `knowledge/raw/chunks.jsonl` — one JSON object per line with a `text` or
+  `content` field (plus optional `module_id`, `chapter_title`,
+  `teaches_concepts`, `difficulty`).
+- `knowledge/raw/transcripts/*.md` and `knowledge/raw/texts/*.md` — markdown
+  with a `key: value` frontmatter block (a `module:` field at minimum).
+
+`henry knowledge export` is a GrowthX-internal adapter: it reads Mongo
+credentials from `GX_BACKEND_DIR/apps/migrations/.env` (`GX_BACKEND_DIR`
+defaults to a hardcoded path on the author's machine — override it via env if
+you have your own gx-backend checkout) and writes the corpus above into
+`knowledge/raw/`. Forks without access to that Mongo instance should populate
+`knowledge/raw/` by hand in the same shape instead of running `export`.
+
+## 3. How it wires to the brain
+
+- **Not** memory (Engram personal store) — a second, independent `Engram`
+  instance with its own DB file (`data/knowledge.db`), by design (§ module
+  contract in `docs/architecture.md`).
+- **Provider runner**: only `distill` calls the provider CLI
+  (`src/knowledge/ingest.ts`, `ingestCards`), budgeted per run and
+  checkpointed so it never re-distills a module twice.
+- **Injected into the main agent automatically**: `HenryAgent.buildPrompt()`
+  (`src/agent/henry.ts`) calls `detectKnowledgeDomain(prompt)`
+  (`src/knowledge/router.ts`); if a domain is detected, it pulls up to 6000
+  chars of context from the knowledge base and appends it to the prompt
+  labeled `--- GrowthX knowledge (tried & tested founder playbooks) ---` — no
+  CLI command needed for this path, it's automatic per turn.
+- **Scheduler**: `workflows/defaults.json` ships
+  `knowledge-distill-nightly` (`kind: "knowledge.distill"`, `batchLimit: 25`,
+  cron `0 2 * * *`) — **enabled by default**. It runs through
+  `WorkflowScheduler.runKnowledgeDistill()` (`src/scheduler/scheduler.ts`),
+  which takes a pid-lock file (`data/knowledge.lock`) so an overlapping manual
+  run never collides with the nightly one.
+
+## 4. Verify
+
+```bash
+npx tsx src/cli.ts knowledge stats        # { ...engram stats... } — works even with zero entries
+npx tsx src/cli.ts knowledge index --limit 10
+# → { entries, skipped, byDomain }   (0 entries if knowledge/raw/ is empty — not an error)
+npx tsx src/cli.ts knowledge search "GTM strategies for B2B SaaS" --domain gtm
+# → [{ score, source, content }]  — empty array is valid if nothing is indexed yet
+npx tsx src/cli.ts knowledge context "onboarding playbook"
+# → a formatted context block, or "" if nothing cleared the score threshold
+```
+
+## 5. Disable
+
+`KnowledgeBase` is constructed lazily (`runtime.get knowledge()` in
+`src/runtime.ts`) — it is **not** opened at boot, only on first `henry
+knowledge ...` call or the first domain-matched agent turn. To keep it fully
+dormant: never run `henry knowledge` commands, and disable the scheduled
+distillation by setting `"enabled": false` on the `knowledge-distill-nightly`
+entry in `workflows/defaults.json`. No env var is required to turn it off.

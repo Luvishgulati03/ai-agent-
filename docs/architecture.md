@@ -189,3 +189,29 @@ The rules, compressed to their essence:
 - The result: a fork can run entirely on a consumer laptop, bounded by
   the provider CLI's subscription limits and local compute, with no
   recurring per-token bill for the agent itself.
+
+## 6. Modules
+
+Every module below is already implemented in this kernel fork. Each guide is
+written for a coding agent to CONFIGURE and VERIFY it end-to-end — not to
+build it from scratch:
+
+- [`docs/modules/gmail.md`](modules/gmail.md) — read inbox, approval-gated
+  send.
+- [`docs/modules/jobs.md`](modules/jobs.md) — inspect postings, tailor +
+  submit applications (approval-gated).
+- [`docs/modules/cover-letters.md`](modules/cover-letters.md) — standalone
+  cover-letter generation and resume editing.
+- [`docs/modules/knowledge-base.md`](modules/knowledge-base.md) — the
+  curated, versioned domain RAG store, separate from personal memory.
+- [`docs/modules/meetings.md`](modules/meetings.md) — local Whisper
+  transcription → structured, personalized meeting notes.
+- [`docs/modules/screenshots.md`](modules/screenshots.md) — vision
+  classification and auto-filing of screenshots.
+- [`docs/modules/reminders.md`](modules/reminders.md) — one-shot, recurring,
+  and approval-execution reminders.
+- [`docs/modules/workflows.md`](modules/workflows.md) — the cron-driven
+  scheduler (legacy JSON `kind`s and the markdown `*.workflow.md` engine).
+- [`docs/modules/mcp-tools.md`](modules/mcp-tools.md) — zero-code
+  capabilities via the provider CLIs' own MCP support, and why
+  outbound-capable MCP tools bypass the approval gate above.
