@@ -14,6 +14,60 @@ interface MailWatchState {
   seenIds: string[];
 }
 
+/**
+ * Dad's explicit request: stop hitting codex every 45 minutes (~32x/day) and instead run 5
+ * random checks/day (~6x fewer calls). The cron tick stays frequent (every 30 min, see
+ * workflows/defaults.json) purely as a scheduling heartbeat; this plan decides which ticks
+ * actually do a check.
+ */
+const PLAN_CHECKS_PER_DAY = 5;
+/** Inclusive local starting hour for planned checks. */
+const PLAN_START_HOUR = 8;
+/** Exclusive local ending hour for planned checks. */
+const PLAN_END_HOUR = 23;
+
+export interface MailWatchPlan {
+  /** Local "YYYY-MM-DD" the plan's `times` belong to. */
+  date: string;
+  /** Sorted ISO timestamps, one per planned check for `date`. */
+  times: string[];
+  /** Indices into `times` that have already fired today. */
+  fired: number[];
+}
+
+export type MailWatchTickResult = MailWatchResult | { skipped: true; reason: string; nextPlannedAt?: string };
+
+/** Local "YYYY-MM-DD" — used to detect day rollover without any timezone library. */
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Picks `count` distinct random minutes-of-day in `[startHour, endHour)` via a partial
+ * Fisher-Yates shuffle (guarantees no duplicates in O(count) rng calls, unlike a reject-loop).
+ * This is deliberately runtime randomness (Math.random by default) — not a workflow script, so
+ * MASTER_PLAN's "no Math.random in generated workflow output" rule doesn't apply here. `rng` is
+ * injectable so tests can assert exact slot placement.
+ */
+function planTimesForDate(date: Date, count: number, startHour: number, endHour: number, rng: () => number = Math.random): string[] {
+  const startMinute = startHour * 60;
+  const endMinute = endHour * 60;
+  const available = Array.from({ length: endMinute - startMinute }, (_, index) => startMinute + index);
+  for (let index = 0; index < count; index += 1) {
+    const offset = Math.min(available.length - index - 1, Math.floor(Math.max(0, Math.min(0.999999999, rng())) * (available.length - index)));
+    const selected = index + offset;
+    [available[index], available[selected]] = [available[selected], available[index]];
+  }
+  return available.slice(0, count).sort((a, b) => a - b).map((minute) => {
+    const slot = new Date(date);
+    slot.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+    return slot.toISOString();
+  });
+}
+
 export interface ParsedAlert {
   id: string;
   from: string;
@@ -79,9 +133,82 @@ export class MailWatchService {
     await fs.chmod(this.config.mailwatchPath, 0o600).catch(() => undefined);
   }
 
-  async status(): Promise<{ lastCheckIso: string; seenCount: number }> {
+  async status(now: Date = new Date()): Promise<{
+    lastCheckIso: string;
+    seenCount: number;
+    plan: { date: string; times: string[]; fired: string[]; pending: string[]; nextPlannedAt?: string };
+  }> {
     const state = await this.readState();
-    return { lastCheckIso: state.lastCheckIso, seenCount: state.seenIds.length };
+    const currentPlan = await this.plan(now);
+    const fired = currentPlan.times.filter((_, index) => currentPlan.fired.includes(index));
+    const pending = currentPlan.times.filter((_, index) => !currentPlan.fired.includes(index));
+    return {
+      lastCheckIso: state.lastCheckIso,
+      seenCount: state.seenIds.length,
+      plan: { date: currentPlan.date, times: currentPlan.times, fired, pending, nextPlannedAt: pending[0] },
+    };
+  }
+
+  private async readPlan(): Promise<MailWatchPlan | undefined> {
+    try {
+      const raw = JSON.parse(await fs.readFile(this.config.mailwatchPlanPath, "utf8")) as Partial<MailWatchPlan>;
+      if (typeof raw.date !== "string" || !Array.isArray(raw.times)) return undefined;
+      return {
+        date: raw.date,
+        times: raw.times.filter((item): item is string => typeof item === "string"),
+        fired: Array.isArray(raw.fired) ? raw.fired.filter((item): item is number => typeof item === "number") : [],
+      };
+    } catch { return undefined; }
+  }
+
+  private async writePlan(plan: MailWatchPlan): Promise<void> {
+    await fs.mkdir(this.config.dataDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(this.config.mailwatchPlanPath, `${JSON.stringify(plan, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await fs.chmod(this.config.mailwatchPlanPath, 0o600).catch(() => undefined);
+  }
+
+  /**
+   * Returns today's randomized check-times plan, generating a fresh one of `PLAN_CHECKS_PER_DAY`
+   * times (persisted) whenever the stored plan is missing, malformed, or dated for a previous
+   * local day. Idempotent within a single day — repeated calls return the same persisted plan.
+   */
+  async plan(now: Date = new Date(), rng: () => number = Math.random): Promise<MailWatchPlan> {
+    const today = localDateKey(now);
+    const existing = await this.readPlan();
+    if (existing && existing.date === today && existing.times.length === PLAN_CHECKS_PER_DAY) return existing;
+    const fresh: MailWatchPlan = {
+      date: today,
+      times: planTimesForDate(now, PLAN_CHECKS_PER_DAY, PLAN_START_HOUR, PLAN_END_HOUR, rng),
+      fired: [],
+    };
+    await this.writePlan(fresh);
+    return fresh;
+  }
+
+  /**
+   * Called on every cron tick (every 30 min — see workflows/defaults.json). Regenerates the plan
+   * on day rollover, then only actually runs `check()` if a planned time is now due and hasn't
+   * fired yet; otherwise it's a no-op that reports the next planned time. This is what turns a
+   * frequent cron tick into ~5 real codex calls/day instead of one per tick.
+   */
+  async tick(now: Date = new Date()): Promise<MailWatchTickResult> {
+    const currentPlan = await this.plan(now);
+    const dueIndex = currentPlan.times.findIndex(
+      (time, index) => !currentPlan.fired.includes(index) && new Date(time).getTime() <= now.getTime(),
+    );
+    if (dueIndex === -1) {
+      const nextPlannedAt = currentPlan.times.find((_, index) => !currentPlan.fired.includes(index));
+      return { skipped: true, reason: "no planned mailwatch check due yet", nextPlannedAt };
+    }
+    const result = await this.check();
+    // Re-read right before marking fired — never trust the copy read at the top of this call
+    // (the reminders-store clobber lesson: two processes writing the same JSON).
+    const fresh = await this.plan(now);
+    if (!fresh.fired.includes(dueIndex)) {
+      fresh.fired = [...fresh.fired, dueIndex].sort((a, b) => a - b);
+      await this.writePlan(fresh);
+    }
+    return result;
   }
 
   /**

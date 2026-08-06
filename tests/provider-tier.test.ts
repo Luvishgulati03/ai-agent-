@@ -13,6 +13,8 @@ import {
   claudeArgs,
   codexArgs,
   execute,
+  isAuthFailureResponse,
+  shouldNotifyAuthFailure,
 } from "../src/providers/runner.ts";
 import type { HenryConfig } from "../src/config.ts";
 import type { ActivityEvent } from "../src/types.ts";
@@ -147,4 +149,54 @@ test("waiting for a slot longer than the envelope is refused rather than spawned
   assert.equal(refusal?.metadata?.refused, "timeout");
   assert.ok(recorded.some((event) => event.kind === "run.failed"));
   if (held.admitted) held.slot.release();
+});
+
+// run() spawns real "codex"/"claude" binaries (the command name IS the provider), so there is
+// no seam to drive the auth-failure fallback branch of the loop without those CLIs installed
+// and actually logged out. isAuthFailureResponse and shouldNotifyAuthFailure are the exported
+// seams instead — this is the observed live signature ("Not logged in · Please run /login",
+// clean exit) that run() now treats as a failure rather than success.
+test("isAuthFailureResponse recognizes the exact live codex logout string", () => {
+  assert.equal(isAuthFailureResponse("Not logged in · Please run /login"), true);
+});
+
+test("isAuthFailureResponse matches known signatures case-insensitively when short", () => {
+  assert.equal(isAuthFailureResponse("not logged in"), true);
+  assert.equal(isAuthFailureResponse("PLEASE RUN /LOGIN"), true);
+  assert.equal(isAuthFailureResponse("Run codex login to continue"), true);
+  assert.equal(isAuthFailureResponse("please login"), true);
+  assert.equal(isAuthFailureResponse("Authentication required."), true);
+  assert.equal(isAuthFailureResponse("401 Unauthorized"), true);
+  assert.equal(isAuthFailureResponse("your token expired"), true);
+});
+
+test("isAuthFailureResponse trips on a long response only when it STARTS WITH the signature", () => {
+  const longFromStart = `Please run /login before continuing. ${"x".repeat(220)}`;
+  assert.ok(longFromStart.length >= 200);
+  assert.equal(isAuthFailureResponse(longFromStart), true);
+});
+
+test("isAuthFailureResponse ignores a long normal reply that merely mentions login mid-text", () => {
+  const normalReply = "Here is a summary of the changes: I updated the settings page so the "
+    + "login page now redirects correctly after a successful sign-in, added tests for the "
+    + "redirect flow, and documented the new behavior in the README so future readers understand "
+    + "why the login page changed and how session expiry is now handled end to end across the app.";
+  assert.ok(normalReply.length >= 200, "fixture must be long to exercise the guard");
+  assert.equal(isAuthFailureResponse(normalReply), false);
+});
+
+test("isAuthFailureResponse ignores empty/blank responses", () => {
+  assert.equal(isAuthFailureResponse(""), false);
+  assert.equal(isAuthFailureResponse("   \n  "), false);
+});
+
+test("shouldNotifyAuthFailure debounces per provider for 10 minutes, independently across providers", () => {
+  // Anchored far from real wall-clock time so this test can't collide with any other test (in
+  // this file or elsewhere) that happens to touch the same module-level debounce map.
+  const base = 5_000_000_000_000;
+  assert.equal(shouldNotifyAuthFailure("codex", base), true, "first hit notifies");
+  assert.equal(shouldNotifyAuthFailure("codex", base + 1_000), false, "debounced well within the window");
+  assert.equal(shouldNotifyAuthFailure("codex", base + 9 * 60 * 1000), false, "still debounced just under 10 minutes");
+  assert.equal(shouldNotifyAuthFailure("claude", base + 1_000), true, "debounce is per-provider, not global");
+  assert.equal(shouldNotifyAuthFailure("codex", base + 10 * 60 * 1000), true, "notifies again once the window has fully elapsed");
 });

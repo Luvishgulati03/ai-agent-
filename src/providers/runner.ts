@@ -5,6 +5,7 @@ import type { ActivityLog } from "../activity.ts";
 import type { DispatchTier, ProviderEvent, ProviderName, RunResult } from "../types.ts";
 import { safeEnvironment } from "../util/env.ts";
 import { AdmissionController, sharedAdmissionController } from "../orchestration/admission.ts";
+import { notifyReminder } from "../reminders/service.ts";
 
 export interface RunOptions {
   provider?: ProviderName;
@@ -176,6 +177,55 @@ export async function execute(
   });
 }
 
+/**
+ * Signatures a provider CLI prints when its session has expired. These exit cleanly (code 0)
+ * with a short "you're logged out" message instead of doing the actual work, so exitCode alone
+ * can't catch it — observed live: codex's session expired mid-use and it printed "Not logged in
+ * · Please run /login" with a clean exit, which ProviderRunner previously treated as SUCCESS.
+ */
+const AUTH_FAILURE_SIGNATURES = [
+  "not logged in",
+  "please run /login",
+  "run codex login",
+  "please login",
+  "authentication required",
+  "401 unauthorized",
+  "token expired",
+];
+
+/**
+ * True when `text` looks like an auth-failure message rather than real output. Matched
+ * case-insensitively, and only trusted when either the WHOLE response is short (< 200 chars —
+ * these messages are terse) or the response STARTS WITH the signature. That guard is what keeps
+ * a long, normal reply that merely mentions e.g. "the login page" from tripping a false positive:
+ * a 300-char answer discussing "login" somewhere in the middle never matches, but a bare
+ * "Not logged in · Please run /login" (or any short reply carrying one of these phrases) does.
+ * Exported for tests and reuse (e.g. surfacing a clear message to callers of read-only runs).
+ */
+export function isAuthFailureResponse(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  const short = trimmed.length < 200;
+  return AUTH_FAILURE_SIGNATURES.some((signature) => lower.includes(signature) && (short || lower.startsWith(signature)));
+}
+
+/** Repeated background jobs (mailwatch, etc.) hitting the same expired session shouldn't spam banners. */
+const AUTH_NOTIFY_DEBOUNCE_MS = 10 * 60 * 1000;
+const lastAuthNotifyAt = new Map<ProviderName, number>();
+
+/**
+ * Gates the "please re-login" notification to at most once per provider per 10 minutes.
+ * Exported as the seam for tests (real notification delivery is not something a unit test
+ * should trigger). Records `now` as the provider's last-notified time whenever it returns true.
+ */
+export function shouldNotifyAuthFailure(provider: ProviderName, now: number = Date.now()): boolean {
+  const last = lastAuthNotifyAt.get(provider);
+  if (last !== undefined && now - last < AUTH_NOTIFY_DEBOUNCE_MS) return false;
+  lastAuthNotifyAt.set(provider, now);
+  return true;
+}
+
 export class ProviderRunner {
   private readonly admission: AdmissionController;
 
@@ -236,6 +286,29 @@ export class ProviderRunner {
         result = await execute(provider, args, cwd, provider, { ...options, timeoutMs: envelopeMs });
       } finally {
         decision.slot.release();
+      }
+      if (result.exitCode === 0 && isAuthFailureResponse(result.response)) {
+        // A clean exit with a "you're logged out" body is a FAILURE, not success — the caller
+        // must not mistake it for real output, and the next provider in sequence (if any) gets
+        // a turn exactly like a nonzero exit would trigger.
+        const authError = `${provider} session logged out — run \`codex login\` / \`claude\` to re-auth`;
+        result = { ...result, error: authError };
+        last = result;
+        await this.activity.record(
+          "run.failed",
+          `${provider} session expired; considering fallback`,
+          { error: authError, authFailure: true },
+          { runId: result.runId, provider, role: options.role },
+        );
+        if (shouldNotifyAuthFailure(provider)) {
+          const nextProvider = sequence[sequence.indexOf(provider) + 1];
+          const fallbackNote = nextProvider ? `Falling back to ${nextProvider}.` : "No fallback available.";
+          void notifyReminder(
+            `⚠️ ${provider} session logged out — run \`codex login\` (or \`claude\`) to re-auth. ${fallbackNote}`,
+            "Henry needs re-login",
+          ).catch(() => undefined);
+        }
+        continue;
       }
       last = result;
       if (result.exitCode === 0 && result.response.trim()) {

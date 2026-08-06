@@ -25,6 +25,8 @@ export interface Reminder {
   dueAt: string;
   /** Croner expression; when set the reminder is recurring and re-arms instead of being marked "fired". */
   cron?: string;
+  /** Randomized local-time daily schedule; when set the reminder re-arms at the next persisted slot. */
+  randomDaily?: RandomDailySchedule;
   /** Mirrors `dueAt` for recurring reminders — kept for callers that want the "next fire" concept explicitly. */
   nextFireAt?: string;
   /** Present when kind === "approval.execute": the approval queue item to execute at fire time. */
@@ -32,6 +34,16 @@ export interface Reminder {
   status: ReminderStatus;
   createdAt: string;
   firedAt?: string;
+}
+
+export interface RandomDailySchedule {
+  count: number;
+  /** Inclusive local starting hour. */
+  startHour: number;
+  /** Exclusive local ending hour. */
+  endHour: number;
+  /** Sorted ISO timestamps for the current/next local day. */
+  slots: string[];
 }
 
 /**
@@ -93,6 +105,53 @@ export function nextCronFireAt(cronExpression: string, from: Date = new Date()):
   const next = job.nextRun(from);
   if (!next) throw new Error(`Cron expression "${cronExpression}" has no future runs`);
   return next;
+}
+
+export const DEFAULT_RANDOM_DAILY_START_HOUR = 9;
+export const DEFAULT_RANDOM_DAILY_END_HOUR = 21;
+
+function randomDailySlotsForDate(
+  date: Date,
+  count: number,
+  startHour: number,
+  endHour: number,
+  rng: () => number = Math.random,
+): Date[] {
+  if (!Number.isInteger(count) || count < 1) throw new Error("Random daily count must be a positive integer");
+  if (!Number.isInteger(startHour) || !Number.isInteger(endHour) || startHour < 0 || endHour > 24 || startHour >= endHour) {
+    throw new Error("Random daily hours must be whole numbers with 0 <= startHour < endHour <= 24");
+  }
+  const availableMinutes = Array.from({ length: (endHour - startHour) * 60 }, (_, index) => startHour * 60 + index);
+  if (count > availableMinutes.length) throw new Error(`Random daily count cannot exceed ${availableMinutes.length} available minutes`);
+  for (let index = 0; index < count; index += 1) {
+    const offset = Math.min(availableMinutes.length - index - 1, Math.floor(Math.max(0, Math.min(0.999999999, rng())) * (availableMinutes.length - index)));
+    const selected = index + offset;
+    [availableMinutes[index], availableMinutes[selected]] = [availableMinutes[selected], availableMinutes[index]];
+  }
+  return availableMinutes.slice(0, count).sort((a, b) => a - b).map((minute) => {
+    const slot = new Date(date);
+    slot.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+    return slot;
+  });
+}
+
+function nextLocalDay(date: Date): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() + 1);
+  return next;
+}
+
+function randomDailySchedule(
+  now: Date,
+  count: number,
+  startHour: number,
+  endHour: number,
+  rng: () => number = Math.random,
+): RandomDailySchedule {
+  let slots = randomDailySlotsForDate(now, count, startHour, endHour, rng).filter((slot) => slot.getTime() > now.getTime());
+  if (slots.length === 0) slots = randomDailySlotsForDate(nextLocalDay(now), count, startHour, endHour, rng);
+  return { count, startHour, endHour, slots: slots.map((slot) => slot.toISOString()) };
 }
 
 /** "YYYY-MM-DD HH:mm" (local time, 24h clock; "T" separator also accepted) → Date. */
@@ -194,6 +253,35 @@ export class ReminderService {
   }
 
   /**
+   * Recurring prompt/message with randomized local-time slots. A fresh set of `count` slots is
+   * generated after the final slot of each local day; persisted slots make restarts harmless.
+   */
+  async createRandomDaily(
+    text: string,
+    count = 5,
+    kind: ReminderKind = "message",
+    now: Date = new Date(),
+    startHour = DEFAULT_RANDOM_DAILY_START_HOUR,
+    endHour = DEFAULT_RANDOM_DAILY_END_HOUR,
+  ): Promise<Reminder> {
+    const randomDaily = randomDailySchedule(now, count, startHour, endHour);
+    const nextFireAt = randomDaily.slots[0];
+    return this.mutate(async () => {
+      await this.ensure();
+      const item: Reminder = {
+        id: randomUUID(), text, kind, dueAt: nextFireAt, randomDaily,
+        nextFireAt, status: "pending", createdAt: new Date().toISOString(),
+      };
+      this.items.push(item);
+      await this.save();
+      await this.activity.record("task.started", `Random daily reminder set: ${text}`, {
+        reminder: true, id: item.id, dueAt: item.dueAt, randomDaily, kind,
+      });
+      return item;
+    });
+  }
+
+  /**
    * One-shot: at `dueAt`, execute the already-approved action `approvalId` (never creates or
    * approves anything — the approval must already be "approved" before this fires). `title`
    * is a friendly display name for notifications/listing; defaults to the approval id.
@@ -272,6 +360,28 @@ export class ReminderService {
     });
   }
 
+  /** Re-arms a randomized daily reminder, generating the next day's slots when today's are spent. */
+  async rearmRandomDaily(id: string, firedAt: Date = new Date()): Promise<Reminder> {
+    return this.mutate(async () => {
+      await this.ensure();
+      const item = this.items.find((candidate) => candidate.id === id);
+      if (!item) throw new Error(`Reminder not found: ${id}`);
+      if (!item.randomDaily) throw new Error(`Reminder ${id} has no randomized daily schedule to re-arm from`);
+      let slots = item.randomDaily.slots
+        .map((slot) => new Date(slot))
+        .filter((slot) => slot.getTime() > firedAt.getTime());
+      if (slots.length === 0) slots = randomDailySlotsForDate(
+        nextLocalDay(firedAt), item.randomDaily.count, item.randomDaily.startHour, item.randomDaily.endHour,
+      );
+      item.randomDaily.slots = slots.map((slot) => slot.toISOString());
+      item.dueAt = item.randomDaily.slots[0];
+      item.nextFireAt = item.dueAt;
+      item.firedAt = firedAt.toISOString();
+      await this.save();
+      return item;
+    });
+  }
+
   /**
    * Fires every due reminder. One-shot reminders flip to "fired" (fire-once — only "pending"
    * reminders match `due()`); recurring reminders (cron set) re-arm to their next occurrence
@@ -320,11 +430,16 @@ export class ReminderService {
       const silentPrompt = reminder.kind === "prompt" && body.trim() === PROMPT_NO_NOTIFICATION;
       const message = overdue ? `(overdue) ${body}` : body;
       if (!silentPrompt) await notify(message);
-      // approval.execute reminders are always one-shot (createApprovalExecute never sets cron) —
-      // this still routes through the same fire-once path as any other one-shot reminder.
-      const updated = reminder.cron ? await this.rearm(reminder.id, now) : await this.markFired(reminder.id, now);
+      // approval.execute reminders are always one-shot (createApprovalExecute never sets cron or
+      // randomDaily); recurring reminders re-arm and stay pending.
+      const recurring = Boolean(reminder.cron || reminder.randomDaily);
+      const updated = reminder.cron
+        ? await this.rearm(reminder.id, now)
+        : reminder.randomDaily
+          ? await this.rearmRandomDaily(reminder.id, now)
+          : await this.markFired(reminder.id, now);
       await this.activity.record("workflow.completed", `Reminder fired: ${reminder.text}`, {
-        reminder: true, id: reminder.id, overdue, kind: reminder.kind, recurring: Boolean(reminder.cron), message,
+        reminder: true, id: reminder.id, overdue, kind: reminder.kind, recurring, message,
         notified: !silentPrompt,
         ...(reminder.kind === "approval.execute" ? { approvalId: reminder.approvalId, error: approvalError } : {}),
       });

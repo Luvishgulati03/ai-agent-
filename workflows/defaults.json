@@ -24,8 +24,8 @@
   {
     "id": "job-mail-watch",
     "name": "Job-application inbox watch",
-    "cron": "*/45 * * * *",
+    "cron": "*/30 * * * *",
     "kind": "mail.watch",
-    "enabled": true
+    "enabled": false
   }
 ]

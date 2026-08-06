@@ -136,7 +136,9 @@ export class WorkflowScheduler {
       const { ProviderRunner } = await import("../providers/runner.ts");
       const runner = new ProviderRunner(this.config, this.activity);
       const service = new MailWatchService(this.config, this.activity, runner, this.notifyReminderFn);
-      return await service.check();
+      // tick() applies the 5-random-checks-per-day plan; the cron firing every 30 min is just
+      // the heartbeat that gives the plan a chance to notice a due time (see MailWatchService.tick).
+      return await service.tick();
     } finally {
       await fs.rm(lockPath, { force: true });
     }
