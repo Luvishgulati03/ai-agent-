@@ -9,9 +9,13 @@ import {
   ReminderService,
   parseAt,
   parseIn,
+  nextCronFireAt,
   REMINDER_OVERDUE_GRACE_MS,
   type ReminderNotifier,
+  type PromptRunner,
+  type ExecuteApprovalFn,
 } from "../src/reminders/service.ts";
+import { startReminderTicker, __resetReminderTickerForTests } from "../src/reminders/ticker.ts";
 
 async function setup(): Promise<{ config: ReturnType<typeof loadConfig>; activity: ActivityLog }> {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "henry-reminders-"));
@@ -169,4 +173,286 @@ test("fireDue() does not prefix '(overdue)' when firing within the normal poll g
   await service.fireDue(notify, withinGrace);
 
   assert.equal(messages[0], "Ping recruiter");
+});
+
+// --- Recurring jobs (cron) ---------------------------------------------------------------
+
+test("createRecurring() computes nextFireAt via croner and stores it alongside dueAt", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date(2026, 7, 6, 12, 3, 0); // local: Thu Aug 6 2026, 12:03
+  const expectedNext = nextCronFireAt("*/5 * * * *", now);
+
+  const reminder = await service.createRecurring("Stretch break", "*/5 * * * *", "message", now);
+
+  assert.equal(reminder.cron, "*/5 * * * *");
+  assert.equal(reminder.kind, "message");
+  assert.equal(reminder.status, "pending");
+  assert.equal(reminder.nextFireAt, expectedNext.toISOString());
+  assert.equal(reminder.dueAt, expectedNext.toISOString());
+});
+
+test("fireDue() re-arms a recurring reminder to its next occurrence instead of marking it fired", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date(2026, 7, 6, 12, 3, 0);
+  const reminder = await service.createRecurring("Stretch break", "*/5 * * * *", "message", now);
+  const firstFire = new Date(reminder.dueAt); // 12:05
+  const expectedSecondFire = nextCronFireAt("*/5 * * * *", firstFire); // 12:10
+
+  const { notify, messages } = fakeNotifier();
+  const fired = await service.fireDue(notify, firstFire);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "pending"); // never "fired" — recurring jobs re-arm
+  assert.deepEqual(messages, ["Stretch break"]);
+  assert.equal(fired[0].dueAt, expectedSecondFire.toISOString());
+  assert.equal(fired[0].nextFireAt, expectedSecondFire.toISOString());
+
+  // due() no longer matches at the old fire time...
+  assert.equal((await service.due(firstFire)).length, 0);
+  // ...but does at the new, re-armed fire time.
+  assert.equal((await service.due(expectedSecondFire)).length, 1);
+
+  const events = await activity.list(10);
+  assert.ok(events.some((event) => event.metadata?.id === reminder.id && event.metadata?.recurring === true));
+});
+
+test("fireDue() re-fires a recurring reminder across multiple occurrences without it ever going 'done'", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date(2026, 7, 6, 12, 3, 0);
+  const reminder = await service.createRecurring("Tick", "*/5 * * * *", "message", now);
+
+  const { notify, messages } = fakeNotifier();
+  let cursor = new Date(reminder.dueAt);
+  for (let i = 0; i < 3; i++) {
+    const fired = await service.fireDue(notify, cursor);
+    assert.equal(fired.length, 1, `expected a fire at iteration ${i}`);
+    assert.equal(fired[0].status, "pending");
+    cursor = new Date(fired[0].dueAt);
+  }
+  assert.equal(messages.length, 3);
+  assert.deepEqual(messages, ["Tick", "Tick", "Tick"]);
+});
+
+// --- Prompt jobs ---------------------------------------------------------------------------
+
+function fakePromptRunner(response: string): { run: PromptRunner; prompts: string[] } {
+  const prompts: string[] = [];
+  const run: PromptRunner = async (prompt) => { prompts.push(prompt); return response; };
+  return { run, prompts };
+}
+
+test("fireDue() runs prompt reminders through the injected PromptRunner and delivers the RESPONSE, not the prompt", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  const reminder = await service.create(
+    "wish Dad good morning with one useful thing from memory",
+    new Date(now.getTime() - 1000),
+    "prompt",
+  );
+
+  const { notify, messages } = fakeNotifier();
+  const { run, prompts } = fakePromptRunner("Morning, Dad! Quick tip: batch your standups.");
+  const fired = await service.fireDue(notify, now, run);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "fired"); // one-shot prompt job still fires once
+  assert.deepEqual(prompts, ["wish Dad good morning with one useful thing from memory"]);
+  assert.deepEqual(messages, ["Morning, Dad! Quick tip: batch your standups."]);
+
+  const events = await activity.list(10);
+  const event = events.find((item) => item.metadata?.id === reminder.id);
+  assert.equal(event?.metadata?.kind, "prompt");
+  assert.equal(event?.metadata?.message, "Morning, Dad! Quick tip: batch your standups.");
+});
+
+test("fireDue() supports recurring prompt jobs: re-arms and re-runs the prompt on each occurrence", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date(2026, 7, 6, 7, 28, 0);
+  const reminder = await service.createRecurring(
+    "wish Dad good morning with one useful thing from memory",
+    "30 7 * * *",
+    "prompt",
+    now,
+  );
+
+  const { notify, messages } = fakeNotifier();
+  const { run, prompts } = fakePromptRunner("Good morning! Here's a tip.");
+  const fired = await service.fireDue(notify, new Date(reminder.dueAt), run);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "pending");
+  assert.equal(fired[0].kind, "prompt");
+  assert.deepEqual(prompts, ["wish Dad good morning with one useful thing from memory"]);
+  assert.deepEqual(messages, ["Good morning! Here's a tip."]);
+});
+
+test("fireDue() falls back to a placeholder when a prompt reminder fires with no PromptRunner configured", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  await service.create("say hi", new Date(now.getTime() - 1000), "prompt");
+
+  const { notify, messages } = fakeNotifier();
+  await service.fireDue(notify, now); // no runPrompt argument
+
+  assert.match(messages[0], /no prompt runner configured/);
+});
+
+test("fireDue() reports a failure message when the PromptRunner throws, and still advances the reminder", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  const reminder = await service.create("say hi", new Date(now.getTime() - 1000), "prompt");
+
+  const { notify, messages } = fakeNotifier();
+  const failing: PromptRunner = async () => { throw new Error("provider unreachable"); };
+  const fired = await service.fireDue(notify, now, failing);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "fired");
+  assert.match(messages[0], /prompt reminder failed: provider unreachable/);
+  assert.equal((await service.get(reminder.id))?.status, "fired");
+});
+
+// --- cancel() stops recurring jobs ----------------------------------------------------------
+
+test("cancel() stops a recurring reminder from ever firing again", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date(2026, 7, 6, 12, 3, 0);
+  const reminder = await service.createRecurring("Stretch break", "*/5 * * * *", "message", now);
+  const firstFire = new Date(reminder.dueAt);
+
+  await service.cancel(reminder.id);
+
+  const { notify, messages } = fakeNotifier();
+  const fired = await service.fireDue(notify, firstFire);
+
+  assert.equal(fired.length, 0);
+  assert.equal(messages.length, 0);
+  assert.equal((await service.get(reminder.id))?.status, "cancelled");
+});
+
+// --- approval.execute jobs (scheduled sends of already-approved actions) --------------------
+
+test("createApprovalExecute() stores the approvalId and a default title", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+
+  const reminder = await service.createApprovalExecute("appr-123", new Date(Date.now() + 60_000));
+
+  assert.equal(reminder.kind, "approval.execute");
+  assert.equal(reminder.approvalId, "appr-123");
+  assert.equal(reminder.text, "approval appr-123");
+  assert.equal(reminder.status, "pending");
+});
+
+test("fireDue() executes an approved approval.execute reminder and notifies success", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  const reminder = await service.createApprovalExecute("appr-approved", new Date(now.getTime() - 1000), "recruiter follow-up email");
+
+  const executed: string[] = [];
+  const executeApproval: ExecuteApprovalFn = async (id) => { executed.push(id); return "sent"; };
+  const { notify, messages } = fakeNotifier();
+  const fired = await service.fireDue(notify, now, undefined, executeApproval);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "fired"); // one-shot, fire-once — never retries
+  assert.deepEqual(executed, ["appr-approved"]);
+  assert.deepEqual(messages, ["Sent scheduled approval recruiter follow-up email"]);
+
+  const events = await activity.list(10);
+  const event = events.find((item) => item.metadata?.id === reminder.id);
+  assert.equal(event?.metadata?.approvalId, "appr-approved");
+  assert.equal(event?.metadata?.error, undefined);
+});
+
+test("fireDue() skips (never retries) an approval.execute reminder whose approval isn't approved yet", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  const reminder = await service.createApprovalExecute("appr-pending", new Date(now.getTime() - 1000), "recruiter follow-up email");
+
+  const executeApproval: ExecuteApprovalFn = async () => {
+    throw new Error("Approval appr-pending is pending; explicit Dad approval is required before execution");
+  };
+  const { notify, messages } = fakeNotifier();
+  const fired = await service.fireDue(notify, now, undefined, executeApproval);
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "fired"); // marked fired even on failure — no retry, ever
+  assert.match(messages[0], /^Scheduled send skipped: Approval appr-pending is pending/);
+
+  // A second poll must not attempt the send again.
+  const secondExecuteApproval: ExecuteApprovalFn = async () => { throw new Error("should never be called again"); };
+  const secondFired = await service.fireDue(notify, new Date(now.getTime() + 60_000), undefined, secondExecuteApproval);
+  assert.equal(secondFired.length, 0);
+  assert.equal(messages.length, 1);
+
+  const events = await activity.list(10);
+  const event = events.find((item) => item.metadata?.id === reminder.id);
+  assert.equal(event?.metadata?.approvalId, "appr-pending");
+  assert.match(String(event?.metadata?.error), /is pending/);
+});
+
+test("fireDue() reports a clear skip message when no executeApproval handler is configured", async () => {
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  const now = new Date("2026-08-06T12:00:00Z");
+  await service.createApprovalExecute("appr-x", new Date(now.getTime() - 1000));
+
+  const { notify, messages } = fakeNotifier();
+  const fired = await service.fireDue(notify, now); // no executeApproval passed
+
+  assert.equal(fired.length, 1);
+  assert.equal(fired[0].status, "fired");
+  assert.match(messages[0], /^Scheduled send skipped: no executeApproval handler configured$/);
+});
+
+// --- Shared reminder ticker (repl/dashboard/daemon all reuse this) --------------------------
+
+test("startReminderTicker() guards against double-starting inside the same process", async () => {
+  __resetReminderTickerForTests();
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+
+  const first = startReminderTicker(service, activity, { pollMs: 60_000 });
+  assert.ok(first, "first startReminderTicker() call should return a handle");
+
+  const second = startReminderTicker(service, activity, { pollMs: 60_000 });
+  assert.equal(second, undefined, "a second call in the same process must not start another ticker");
+
+  first!.stop();
+
+  const third = startReminderTicker(service, activity, { pollMs: 60_000 });
+  assert.ok(third, "after stop(), a new ticker should be startable again");
+  third!.stop();
+});
+
+test("startReminderTicker() fires an immediate due-reminder check without waiting for the poll interval", async () => {
+  __resetReminderTickerForTests();
+  const { config, activity } = await setup();
+  const service = new ReminderService(config, activity);
+  await service.create("Immediate check", new Date(Date.now() - 1000));
+
+  const { notify, messages } = fakeNotifier();
+  const handle = startReminderTicker(service, activity, { notify, pollMs: 60_000 });
+  try {
+    // fireDue() runs asynchronously (real fs I/O) inside the ticker's immediate check;
+    // poll briefly rather than assuming a fixed number of microtask flushes is enough.
+    const deadline = Date.now() + 2_000;
+    while (messages.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.deepEqual(messages, ["Immediate check"]);
+  } finally {
+    handle!.stop();
+  }
 });

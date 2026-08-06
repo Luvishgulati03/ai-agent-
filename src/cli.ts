@@ -6,7 +6,8 @@ import path from "node:path";
 import { HenryRuntime } from "./runtime.ts";
 import { startDashboard } from "./dashboard/server.ts";
 import { writeCronFile, writeLaunchdPlist } from "./scheduler/install.ts";
-import { parseAt, parseIn } from "./reminders/service.ts";
+import { parseAt, parseIn, type ReminderKind } from "./reminders/service.ts";
+import { startReminderTicker, type ReminderTickerHandle } from "./reminders/ticker.ts";
 
 const args = process.argv.slice(2);
 
@@ -27,7 +28,7 @@ function print(value: unknown): void {
   if (typeof value === "string") console.log(value); else console.log(JSON.stringify(value, null, 2));
 }
 
-async function repl(runtime: HenryRuntime): Promise<void> {
+async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle): Promise<void> {
   const rl = readline.createInterface({ input, output, prompt: "henry> " });
   console.log("Henry is ready, Dad. Type :help for commands or ask normally.\n");
   rl.prompt();
@@ -52,6 +53,7 @@ async function repl(runtime: HenryRuntime): Promise<void> {
     rl.prompt();
   }
   rl.close();
+  reminderTicker?.stop(); // never let the poll interval keep the process alive after the REPL exits
 }
 
 async function main(): Promise<void> {
@@ -64,9 +66,18 @@ async function main(): Promise<void> {
       if (!prompt) throw new Error("Usage: henry ask <prompt>");
       print((await runtime.agent.run(prompt, { provider: option("--provider") as "codex" | "claude" | undefined })).response);
     } else if (command === "repl") {
-      keepAlive = true; await repl(runtime);
+      keepAlive = true;
+      const ticker = startReminderTicker(runtime.reminders, runtime.activity, {
+        promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
+        executeApproval: (approvalId) => runtime.executeApproval(approvalId),
+      });
+      await repl(runtime, ticker);
     } else if (command === "dashboard") {
       startDashboard(runtime); keepAlive = true;
+      startReminderTicker(runtime.reminders, runtime.activity, {
+        promptRunner: (prompt) => runtime.agent.run(prompt).then((result) => result.response),
+        executeApproval: (approvalId) => runtime.executeApproval(approvalId),
+      });
       console.log(`Henry dashboard: http://${runtime.config.host}:${runtime.config.port}`);
     } else if (command === "status") {
       print(await runtime.status());
@@ -257,18 +268,35 @@ async function main(): Promise<void> {
     } else if (command === "remind") {
       const sub = args[1];
       if (sub === "list") {
-        print((await runtime.reminders.list()).map((item) => ({ id: item.id, text: item.text, dueAt: item.dueAt, status: item.status })));
+        print((await runtime.reminders.list()).map((item) => ({
+          id: item.id, text: item.text, kind: item.kind, dueAt: item.dueAt, cron: item.cron,
+          nextFireAt: item.nextFireAt, approvalId: item.approvalId, status: item.status,
+        })));
       } else if (sub === "cancel") {
         if (!args[2]) throw new Error("Usage: henry remind cancel <id>");
         print(await runtime.reminders.cancel(args[2]));
       } else {
-        const text = sub;
+        const executeApprovalId = option("--execute-approval");
         const at = option("--at");
         const inValue = option("--in");
-        if (!text || (!at && !inValue)) throw new Error('Usage: henry remind "<text>" --at "YYYY-MM-DD HH:mm" | --in "2h"');
-        const dueAt = at ? parseAt(at) : parseIn(inValue!);
-        const reminder = await runtime.reminders.create(text, dueAt);
-        print({ id: reminder.id, text: reminder.text, dueAt: reminder.dueAt, status: reminder.status });
+        const every = option("--every");
+        if (executeApprovalId) {
+          if (every) throw new Error("henry remind --execute-approval does not support --every — a scheduled send is one-shot, never recurring.");
+          if (!at && !inValue) throw new Error('Usage: henry remind --execute-approval <approvalId> --at "YYYY-MM-DD HH:mm" | --in "2h"');
+          const dueAt = at ? parseAt(at) : parseIn(inValue!);
+          const reminder = await runtime.reminders.createApprovalExecute(executeApprovalId, dueAt, option("--title"));
+          print({ id: reminder.id, text: reminder.text, kind: reminder.kind, approvalId: reminder.approvalId, dueAt: reminder.dueAt, status: reminder.status });
+        } else {
+          const promptText = option("--prompt");
+          const text = promptText || (sub && !sub.startsWith("--") ? sub : undefined);
+          const kind: ReminderKind = promptText ? "prompt" : "message";
+          const usage = 'Usage: henry remind "<text>" --at "YYYY-MM-DD HH:mm" | --in "2h" | --every "<cron>"  (or: henry remind --prompt "<instruction>" --at|--in|--every ...  or: henry remind --execute-approval <id> --at|--in ...)';
+          if (!text || (!at && !inValue && !every)) throw new Error(usage);
+          const reminder = every
+            ? await runtime.reminders.createRecurring(text, every, kind)
+            : await runtime.reminders.create(text, at ? parseAt(at) : parseIn(inValue!), kind);
+          print({ id: reminder.id, text: reminder.text, kind: reminder.kind, dueAt: reminder.dueAt, cron: reminder.cron, nextFireAt: reminder.nextFireAt, status: reminder.status });
+        }
       }
     } else if (command === "linkedin") {
       const topic = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");

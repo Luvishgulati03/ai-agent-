@@ -50,7 +50,12 @@ export class HenryRuntime {
     this.agent = new HenryAgent(config, this.activity, this.memory, () => this.knowledge);
     this.luna = new LunaOrchestrator(config, this.activity, this.memory);
     this.reminders = new ReminderService(config, this.activity);
-    this.scheduler = new WorkflowScheduler(config, this.activity, this.memory, this.gmail, this.reminders);
+    this.scheduler = new WorkflowScheduler(
+      config, this.activity, this.memory, this.gmail, this.reminders,
+      undefined,
+      (prompt) => this.agent.run(prompt).then((result) => result.response),
+      (approvalId) => this.executeApproval(approvalId),
+    );
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
