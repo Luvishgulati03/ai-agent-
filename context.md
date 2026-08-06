@@ -8,7 +8,15 @@ This file is the durable handoff for any other agentic IDE, model, or engineer w
 
 The complete architecture & roadmap plan (memory flagship, dev workflows, E2E stacks, capability roadmap, M1 resource policy, dashboard spec, open-source plan, build phases) is in **`docs/MASTER_PLAN.md`** (2026-08-06). Read it before starting any new phase; it supersedes the "next recommended phases" list at the bottom of this file.
 
-## Latest handoff — 2026-08-07 (~00:30) — Gmail-MCP live, mailwatch, hologram, notifications SOLVED
+## Latest handoff — 2026-08-07 (~03:45) — latency plan shipped; runaway-reminder incident resolved
+
+Post-00:30 additions (all pushed): REPL streaming + elapsed spinner; provider SESSION REUSE live (per-surface, slim resumed prompts, codex thread-id capture from thread.started, eviction retry; proven turns:2 single claude session); prompt diet rides sessions; intent tiering (smalltalk→t0 haiku, bypasses sessions — claude rejects --resume with a different --model); async post-turn memory capture; auth-failure fallback + re-login banner alert (debounced); mailwatch 5-random-daily plan; draft-replies skill (henry gmail draftreplies → real Gmail drafts, never sends); REPL buffer-and-drain queueing; living heartbeat (bpm ramps when working).
+
+KEY BUG ARCHAEOLOGY: (1) claude NEVER worked through ProviderRunner until now — safeEnvironment stripped USER, which claude's keychain auth requires ("Not logged in" with clean exit; codex fallback masked it for days). (2) TWO stray recurring prompt-reminders ("Check Dad's Gmail inbox", */15 cron, created conversationally before mailwatch existed) were burning ~192 heavy Gmail runs/day — cause of the night's mystery load/hangs; both cancelled; mailwatch owns that job now. (3) Agent-stream stalls ≈ provider backend blips (3 workers died mid-flight; work verified/finished by orchestrator per QA doctrine).
+
+OPEN: dashboard re-login button (spec in chat, dispatch first thing — dashboard files free); Dad's morning list: restart REPL + dashboard (pick up sessions/t0/heartbeat), connect Telegram (BotFather → .env keys → henry telegram test), optionally connect a Claude-side Gmail MCP.
+
+## Previous handoff — 2026-08-07 (~00:30) — Gmail-MCP live, mailwatch, hologram, notifications SOLVED
 
 Additions after the night handoff below (all pushed, 47 commits total on personal/main):
 - **Gmail via Codex MCP, PROVEN**: user's Codex CLI has @gongrzhe/server-gmail-autoauth-mcp registered+authed; Henry's brain reads inbox natively in conversation (live-verified through ProviderRunner AND `henry ask`). claude -p has NO gmail tools (claude.ai connector does not propagate — probed twice, definitive). Hard rail in agent prompt: MCP may READ + DRAFT only; sending stays approval-queue-only. Docs: docs/modules/gmail.md is MCP-first now.
