@@ -1,6 +1,8 @@
 import type { ProviderName } from "../types.ts";
 
-const BASE_KEYS = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM", "CI", "CODEX_HOME", "GH_HOST", "GH_TOKEN", "GITHUB_TOKEN", "NODE_PATH"];
+// USER is required by claude's keychain-backed auth — without it the CLI reports
+// "Not logged in" even with a valid session (bisected 2026-08-07).
+const BASE_KEYS = ["PATH", "HOME", "USER", "TMPDIR", "LANG", "LC_ALL", "TERM", "CI", "CODEX_HOME", "GH_HOST", "GH_TOKEN", "GITHUB_TOKEN", "NODE_PATH"];
 
 export function safeEnvironment(provider?: ProviderName, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   const keys = [...BASE_KEYS];

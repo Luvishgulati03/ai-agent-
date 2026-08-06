@@ -4,10 +4,21 @@ import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { DispatchTier, ProviderEvent, ProviderName, RunResult } from "../types.ts";
 import { safeEnvironment } from "../util/env.ts";
+import path from "node:path";
+import { SessionManager, sessionArgs } from "./session.ts";
 import { AdmissionController, sharedAdmissionController } from "../orchestration/admission.ts";
 import { notifyReminder } from "../reminders/service.ts";
 
 export interface RunOptions {
+  /**
+   * Names a long-lived conversation surface (e.g. "repl", "dashboard-ask").
+   * When set, the run resumes that surface's provider session instead of a
+   * cold ephemeral spawn (latency §11.5 #2). Callers that set this SHOULD
+   * send slim prompts on resumed turns — ask `acquireSession` first.
+   */
+  surface?: string;
+  /** Precomputed session from acquireSession() — lets the caller build a slim prompt for resumed turns. */
+  session?: { id: string; fresh: boolean; provider: ProviderName };
   provider?: ProviderName;
   cwd?: string;
   role?: string;
@@ -54,13 +65,15 @@ function collectText(value: unknown, output: string[]): void {
  */
 export function codexArgs(
   prompt: string,
-  options: { readOnly: boolean; tier?: DispatchTier; model?: string } = { readOnly: false },
+  options: { readOnly: boolean; tier?: DispatchTier; model?: string; session?: { id: string; fresh: boolean } } = { readOnly: false },
 ): string[] {
   const model = options.tier === "t0" ? CODEX_T0_MODEL : options.model;
+  const resume = options.session ? sessionArgs("codex", options.session).codexSubcommand : [];
+  // Sessions imply persistence: drop --ephemeral whenever a surface session is in play.
   return [
-    "exec",
+    "exec", ...resume,
     ...(model ? ["-m", model] : []),
-    "--json", "--ephemeral", "--sandbox", options.readOnly ? "read-only" : "danger-full-access",
+    "--json", ...(options.session ? [] : ["--ephemeral"]), "--sandbox", options.readOnly ? "read-only" : "danger-full-access",
     "-c", 'approval_policy="never"',
     ...(options.tier === "t2" ? ["-c", 'model_reasoning_effort="high"'] : []),
     "--skip-git-repo-check", prompt,
@@ -73,20 +86,21 @@ export function codexArgs(
  */
 export function claudeArgs(
   prompt: string,
-  options: { readOnly?: boolean; tier?: DispatchTier; model?: string } = {},
+  options: { readOnly?: boolean; tier?: DispatchTier; model?: string; session?: { id: string; fresh: boolean } } = {},
 ): string[] {
   const model = options.tier === "t0" ? "haiku" : options.tier === "t2" ? "opus" : options.model;
-  return ["-p", ...(model ? ["--model", model] : []), prompt, "--dangerously-skip-permissions"];
+  const session = options.session ? sessionArgs("claude", options.session).claudeArgs : [];
+  return ["-p", ...(model ? ["--model", model] : []), ...session, prompt, "--dangerously-skip-permissions"];
 }
 
 export function buildProviderArgs(
   provider: ProviderName,
   prompt: string,
-  options: { readOnly: boolean; tier?: DispatchTier; codexModel?: string; claudeModel?: string },
+  options: { readOnly: boolean; tier?: DispatchTier; codexModel?: string; claudeModel?: string; session?: { id: string; fresh: boolean } },
 ): string[] {
   return provider === "codex"
-    ? codexArgs(prompt, { readOnly: options.readOnly, tier: options.tier, model: options.codexModel })
-    : claudeArgs(prompt, { readOnly: options.readOnly, tier: options.tier, model: options.claudeModel });
+    ? codexArgs(prompt, { readOnly: options.readOnly, tier: options.tier, model: options.codexModel, session: options.session })
+    : claudeArgs(prompt, { readOnly: options.readOnly, tier: options.tier, model: options.claudeModel, session: options.session });
 }
 
 /**
@@ -227,6 +241,19 @@ export function shouldNotifyAuthFailure(provider: ProviderName, now: number = Da
 }
 
 export class ProviderRunner {
+  private sessionManager?: SessionManager;
+
+  sessions(): SessionManager {
+    this.sessionManager ||= new SessionManager(path.join(this.config.dataDir, "sessions.json"));
+    return this.sessionManager;
+  }
+
+  /** Peek/create the session a surfaced run() will use — lets callers slim resumed prompts. */
+  acquireSession(surface: string, provider?: ProviderName): { id: string; fresh: boolean; provider: ProviderName } {
+    const p = provider || this.config.provider;
+    return { ...this.sessions().acquire(surface, p), provider: p };
+  }
+
   private readonly admission: AdmissionController;
 
   constructor(
@@ -250,11 +277,19 @@ export class ProviderRunner {
     let last: RunResult | undefined;
 
     for (const provider of sequence) {
+      // Surface sessions: reuse the caller's precomputed session when it matches
+      // this provider; a fallback provider gets its own surface session instead.
+      const session = options.surface
+        ? (options.session && options.session.provider === provider
+            ? { id: options.session.id, fresh: options.session.fresh }
+            : this.sessions().acquire(options.surface, provider))
+        : undefined;
       const args = buildProviderArgs(provider, prompt, {
         readOnly: options.readOnly === true,
         tier: options.tier,
         codexModel: this.config.codexModel,
         claudeModel: this.config.claudeModel,
+        session,
       });
       const cwd = options.cwd || this.config.rootDir;
       const decision = await this.admission.waitForSlot({ provider, timeoutMs: envelopeMs, label: options.role });
@@ -312,8 +347,23 @@ export class ProviderRunner {
       }
       last = result;
       if (result.exitCode === 0 && result.response.trim()) {
+        if (options.surface && session) {
+          if (provider === "codex" && session.fresh) {
+            // Codex mints its own id (thread.started event) — store the REAL one for resume.
+            const threadEvent = result.events.find((e) => e.parsed && (e.parsed as Record<string, unknown>).type === "thread.started");
+            const threadId = threadEvent && String((threadEvent.parsed as Record<string, unknown>).thread_id || "");
+            if (threadId) this.sessions().updateId(options.surface, provider, threadId);
+          }
+          this.sessions().markUsed(options.surface, provider);
+        }
         await this.activity.record("run.completed", `${provider} completed`, { durationMs: result.durationMs, tier: options.tier }, { runId: result.runId, provider, role: options.role });
         return result;
+      }
+      if (options.surface && session && !session.fresh) {
+        // A failed resumed turn may mean the provider evicted the session — reset
+        // so the caller's retry (or next turn) starts fresh instead of looping.
+        this.sessions().reset(options.surface, provider);
+        (result as { sessionReset?: boolean }).sessionReset = true;
       }
       await this.activity.record("run.failed", `${provider} failed; considering fallback`, { error: result.error }, { runId: result.runId, provider, role: options.role });
     }

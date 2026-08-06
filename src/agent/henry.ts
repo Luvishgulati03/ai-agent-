@@ -26,7 +26,13 @@ export class HenryAgent {
   ) { this.runner = new ProviderRunner(config, activity); }
 
   /** Assembles the full provider prompt without invoking the provider — the testable seam. */
-  async buildPrompt(prompt: string, runId: string): Promise<string> {
+  /**
+   * fresh=true builds the full prompt (soul/persona/instructions + dynamic
+   * context). fresh=false (a resumed provider session already holds the static
+   * blocks) sends only a compact safety header + dynamic context + the request —
+   * the prompt-diet half of session reuse (latency §11.5 #2+#3).
+   */
+  async buildPrompt(prompt: string, runId: string, fresh = true): Promise<string> {
     const soul = await readText(`${this.config.rootDir}/soul.md`);
     const persona = await readText(`${this.config.rootDir}/personality.md`);
     const instructions = await readText(`${this.config.rootDir}/AGENTS.md`);
@@ -41,7 +47,11 @@ export class HenryAgent {
         await this.activity.record("run.failed", "Knowledge recall failed; continuing without it", { error: String(error) }, { runId });
       }
     }
-    return [
+    const slimHeader = [
+      "You are Henry (session resumed — your soul, personality, and operating rules from earlier in this session still apply).",
+      "Never send anything outbound without Dad's explicit approval; stage it instead.",
+    ];
+    const staticBlocks = [
       "You are Henry, Luvish Junior, a terminal-first personal engineering agent.",
       "Call the user Dad. Luna is the top-level orchestrator and may delegate specialist work to you.",
       OUTBOUND_EMAIL_APPROVAL_GUARDRAIL,
@@ -64,17 +74,29 @@ export class HenryAgent {
       "\n--- soul.md (non-negotiable operating contract) ---\n", soul,
       "\n--- personality.md ---\n", persona,
       "\n--- AGENTS.md ---\n", instructions,
+    ].filter(Boolean);
+    const dynamicTail = [
       "\n--- recalled Engram context ---\n", context,
       ...(knowledgeBlock ? ["\n", knowledgeBlock] : []),
       "\n--- Dad's request ---\n", prompt,
       "\nReturn a clear answer and state any action that was intentionally staged for approval.",
-    ].join("\n");
+    ];
+    return [...(fresh ? staticBlocks : slimHeader), ...dynamicTail].join("\n");
   }
 
   async run(prompt: string, options: RunOptions = {}): Promise<Awaited<ReturnType<ProviderRunner["run"]>>> {
     const runId = randomUUID();
-    const fullPrompt = await this.buildPrompt(prompt, runId);
-    const result = await this.runner.run(fullPrompt, { ...options, onEvent: (event) => options.onEvent?.(event) });
+    // Surface sessions (latency §11.5): resumed turns send a slim prompt — the
+    // provider session already holds the static soul/persona blocks.
+    const session = options.surface ? this.runner.acquireSession(options.surface, options.provider) : undefined;
+    const fullPrompt = await this.buildPrompt(prompt, runId, session ? session.fresh : true);
+    let result = await this.runner.run(fullPrompt, { ...options, session, onEvent: (event) => options.onEvent?.(event) });
+    if (options.surface && session && !session.fresh && (result as { sessionReset?: boolean }).sessionReset) {
+      // Provider evicted the session mid-stream: rebuild fresh once with the full prompt.
+      const retrySession = this.runner.acquireSession(options.surface, options.provider);
+      const retryPrompt = await this.buildPrompt(prompt, runId, true);
+      result = await this.runner.run(retryPrompt, { ...options, session: retrySession, onEvent: (event) => options.onEvent?.(event) });
+    }
     if (result.response.trim()) {
       await this.memory.remember(redactSecrets(`Dad asked: ${prompt}\n\nHenry answered:\n${result.response}`), {
         source: `captured/${new Date().toISOString().slice(0, 10)}-conversation.md`,

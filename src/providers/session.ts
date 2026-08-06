@@ -82,6 +82,15 @@ export class SessionManager {
     this.write(sessions);
   }
 
+  /** Codex mints its own session/thread id on create — swap ours for the real one. */
+  updateId(surface: string, provider: ProviderName, realId: string): void {
+    const sessions = this.read();
+    const record = sessions[key(surface, provider)];
+    if (!record) return;
+    record.id = realId;
+    this.write(sessions);
+  }
+
   /** A failed resume (session evicted provider-side) must not poison later turns. */
   reset(surface: string, provider?: ProviderName): void {
     const sessions = this.read();

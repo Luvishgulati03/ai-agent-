@@ -62,7 +62,7 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
     }, 1000);
     process.stdout.write("henry is thinking… ");
     try {
-      const result = await runtime.agent.run(value, {
+      const result = await runtime.agent.run(value, { surface: "repl",
         onEvent: (event) => {
           const text = event.parsed && typeof (event.parsed as Record<string, unknown>).text === "string"
             ? String((event.parsed as Record<string, unknown>).text)
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
     if (command === "ask") {
       const prompt = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
       if (!prompt) throw new Error("Usage: henry ask <prompt>");
-      print((await runtime.agent.run(prompt, { provider: option("--provider") as "codex" | "claude" | undefined })).response);
+      print((await runtime.agent.run(prompt, { surface: "repl", provider: option("--provider") as "codex" | "claude" | undefined })).response);
     } else if (command === "repl") {
       keepAlive = true;
       let redrawPrompt: () => void = () => {};
