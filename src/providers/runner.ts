@@ -191,8 +191,11 @@ export class ProviderRunner {
     const preferred = options.provider || this.config.provider;
     // Claude's installed CLI does not expose a verified read-only mode in the
     // contract we use here. Never turn a read-only review into a write-capable
-    // fallback; Codex is the safe reviewer for this path.
-    const sequence: ProviderName[] = options.readOnly ? ["codex"] : preferred === "codex" ? ["codex", "claude"] : ["claude", "codex"];
+    // FALLBACK; an EXPLICIT caller choice of claude (e.g. vision classification)
+    // is honored as a single-provider run with no fallback either way.
+    const sequence: ProviderName[] = options.readOnly
+      ? [options.provider === "claude" ? "claude" as const : "codex" as const]
+      : preferred === "codex" ? ["codex", "claude"] : ["claude", "codex"];
     const envelopeMs = options.timeoutMs ?? DEFAULT_ENVELOPE_MS;
     let last: RunResult | undefined;
 

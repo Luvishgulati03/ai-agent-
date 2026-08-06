@@ -122,6 +122,18 @@ async function main(): Promise<void> {
         const text = await fs.readFile(runtime.config.resumeSourcePath, "utf8").catch(() => "");
         print({ resumePath: runtime.config.resumeSourcePath, preview: text.split(/\r?\n/).slice(0, 10).join("\n") });
       } else throw new Error("Usage: henry resume edit <instructions...>|promote <markdown-path>|show");
+    } else if (command === "meetings") {
+      const sub = args[1];
+      if (sub === "shadow") {
+        if (!args[2]) throw new Error("Usage: henry meetings shadow <audio-file> [--title t]");
+        print(await runtime.meetings.process(args[2], option("--title")));
+      } else throw new Error("Usage: henry meetings shadow <audio-file> [--title t]");
+    } else if (command === "screenshots") {
+      const sub = args[1] || "backlog";
+      if (sub === "backlog") print(await runtime.screenshots.sortBacklog(Number(option("--limit")) || 20));
+      else if (sub === "sort") { if (!args[2]) throw new Error("Usage: henry screenshots sort <image-path>"); print(await runtime.screenshots.sortOne(args[2])); }
+      else if (sub === "watch") { const close = await runtime.screenshots.watch(); keepAlive = true; console.log("Watching for screenshots. Ctrl+C to stop."); process.once("SIGINT", () => { close(); process.exit(0); }); }
+      else throw new Error("Usage: henry screenshots backlog|sort <path>|watch");
     } else if (command === "knowledge") {
       const { KnowledgeBase } = await import("./knowledge/store.ts");
       const kb = new KnowledgeBase(runtime.config);
