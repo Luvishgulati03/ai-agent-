@@ -8,9 +8,29 @@ This file is the durable handoff for any other agentic IDE, model, or engineer w
 
 The complete architecture & roadmap plan (memory flagship, dev workflows, E2E stacks, capability roadmap, M1 resource policy, dashboard spec, open-source plan, build phases) is in **`docs/MASTER_PLAN.md`** (2026-08-06). Read it before starting any new phase; it supersedes the "next recommended phases" list at the bottom of this file.
 
-## Latest handoff — 2026-08-06 (second pause) — Henry build in progress
+## Latest handoff — 2026-08-06 (evening) — knowledge base LIVE, repo moved off iCloud
 
-Work is paused again at Dad's request. This section supersedes the earlier 2026-08-06 handoff below; read both.
+**THE CANONICAL WORKING COPY IS NOW `~/dev/henry`** (this file's home). The old Desktop copy (`.../junior's repo/luvish jr`) hit fatal iCloud-eviction read hangs (~10GB free disk → aggressive eviction; even module imports froze) and is STALE — do not build there. Dad should open future sessions in `~/dev/henry`.
+
+### Done this session (all committed locally, 8 commits ahead of origin)
+
+- Rename Lavu→Henry; jobs pipeline + tailored-resume PDFs; **cover-letter flow** (`henry cover import <resume-file>` — done, resume.md exists from Dad's docx; `henry cover <job-url|jd>` re-reads resume every call, generates via one CLI call, saves md+pdf under `data/cover-letters/`); provider toggle; `henry code` task command; dashboard job panel; **knowledge module** (`src/knowledge/`): read-only GX Mongo export (gx-prod-database via DB_STRING in gx-backend/apps/migrations/.env; find/aggregate only; member notes excluded) → 5,048 LX-RAG learningchunks + 305 transcripts + text modules → local bge-small embeddings (transformers.js, $0) → `data/knowledge.db` (~30k entries). CLI: `henry knowledge export|index|distill|search|context|stats`.
+- Retrieval validated (GTM/community + PM queries return correct founder content, ~350ms warm). Tuning applied per LX-RAG evaluation: domain=soft boost not hard filter, minScore 0.02 floor, ≤2 chunks/module. Editor-JSON leakage in text exports fixed (richTextToPlain); full re-export+re-index was running at session end — verify `data/knowledge.db` stats (~30k entries) before trusting.
+- Sub-agent policy: workers run on **Sonnet** (Dad's directive); LLM work uses subscription CLIs only, never APIs.
+
+### Blocked on Dad (in order)
+
+1. **Codex CLI missing on this machine** → `npm i -g @openai/codex` + login. Until then `henry knowledge distill` produces 0 cards (read-only work runs Codex-only by design; 1,120 modules queued, checkpoint-resumable). Raw layer works fine without cards.
+2. **Personal GitHub auth** (`gh auth login` → Luvishgulati03) + repo decision (`ai-agent-` vs new `henry` repo) → then push all commits.
+3. Disk: only ~10GB free — the root cause of every iCloud hang; worth cleaning.
+
+### Next build steps (per MASTER_PLAN phases)
+
+Verify rebuild → distill batch (after Codex install) → knowledge injection into HenryAgent/launch-crew workflow (§6.3) → memory v1 upgrades (local embeddings for personal memory too, extraction, supersede) → workflow engine + Friday/Junior parity phases.
+
+## Previous handoff — 2026-08-06 (second pause) — superseded above
+
+Work was paused at Dad's request. This section is retained for decision history; read the section above first.
 
 ### What is DONE in the working tree (uncommitted)
 
