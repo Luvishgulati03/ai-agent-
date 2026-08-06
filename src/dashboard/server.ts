@@ -3,7 +3,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { DASHBOARD_HTML } from "./page.ts";
 import { KnowledgeBase } from "../knowledge/store.ts";
+import { sampleResources } from "./resources.ts";
 import type { HenryRuntime } from "../runtime.ts";
+import type { ActivityEvent } from "../types.ts";
+
+const EVENTS_POLL_MS = 2000;
+
+function sseWrite(response: http.ServerResponse, event: string, data: unknown): void {
+  if (response.writableEnded) return;
+  response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
 
 // Lazily constructed and cached: KnowledgeBase loads a local embedding model on
 // construction, so it must be created at most once for the life of the process,
@@ -53,6 +62,46 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
       if (request.method === "GET" && url.pathname === "/api/health") { json(response, 200, { ok: true, timestamp: new Date().toISOString() }); return; }
       if (request.method === "GET" && url.pathname === "/api/status") { json(response, 200, await runtime.status()); return; }
       if (request.method === "GET" && url.pathname === "/api/activity") { json(response, 200, await runtime.activity.list(Number(url.searchParams.get("limit")) || 100)); return; }
+      if (request.method === "GET" && url.pathname === "/api/events") {
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-store",
+          "connection": "keep-alive",
+        });
+        sseWrite(response, "hello", { timestamp: new Date().toISOString() });
+
+        let lastSeenId: string | null = null;
+
+        const tick = async (): Promise<void> => {
+          if (response.writableEnded) return;
+          let events: ActivityEvent[] = [];
+          try { events = await runtime.activity.list(20); } catch { /* activity log hiccup; skip this tick's diff */ }
+          if (events.length) {
+            const chronological = [...events].reverse(); // oldest -> newest
+            const startIndex = lastSeenId ? chronological.findIndex((event) => event.id === lastSeenId) + 1 : 0;
+            for (const event of chronological.slice(startIndex)) sseWrite(response, "activity", event);
+            lastSeenId = chronological[chronological.length - 1].id;
+          }
+          try {
+            const resources = await sampleResources();
+            const pending = await runtime.approvals.list("pending").catch(() => []);
+            sseWrite(response, "resources", {
+              ...resources,
+              heartbeat: {
+                uptimeSec: Math.round(process.uptime()),
+                lastActivityAt: events[0]?.timestamp ?? null,
+                pendingApprovals: pending.length,
+              },
+            });
+          } catch { /* resource sampling hiccup; skip this tick's resources push */ }
+        };
+
+        await tick();
+        const interval = setInterval(() => { void tick(); }, EVENTS_POLL_MS);
+        request.on("close", () => clearInterval(interval));
+        response.on("close", () => clearInterval(interval));
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/approvals") { json(response, 200, await runtime.approvals.list()); return; }
       if (request.method === "GET" && url.pathname === "/api/workflows") { json(response, 200, await runtime.scheduler.definitions()); return; }
       if (request.method === "GET" && url.pathname === "/api/jobs") {
