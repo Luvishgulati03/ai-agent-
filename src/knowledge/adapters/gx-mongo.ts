@@ -12,6 +12,32 @@ const GX_BACKEND = process.env.GX_BACKEND_DIR || "/Users/luvishgulati/Growth x r
 
 interface ExportCounts { chunks: number; transcripts: number; texts: number; modules: number }
 
+/** Flattens Quill Delta / Lexical / arbitrary editor JSON into plain prose; passes plain text through. */
+function richTextToPlain(raw: string): string {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return trimmed;
+  try {
+    const out: string[] = [];
+    const walk = (node: unknown): void => {
+      if (typeof node === "string") return;
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (node && typeof node === "object") {
+        const record = node as Record<string, unknown>;
+        if (typeof record.insert === "string") out.push(record.insert);
+        if (typeof record.text === "string") out.push(record.text);
+        if (record.type === "linebreak" || record.type === "paragraph") out.push("\n");
+        for (const key of ["ops", "children", "root", "content", "curriculum_content", "overview", "skills", "logistics"]) {
+          if (record[key] !== undefined) walk(record[key]);
+        }
+      }
+    };
+    walk(JSON.parse(trimmed));
+    const text = out.join(" ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+    return text || trimmed;
+  } catch { return trimmed; }
+}
+
 function dedupConsecutiveLines(text: string): string {
   const lines = text.split(/\r?\n/);
   const out: string[] = [];
@@ -79,7 +105,7 @@ export async function exportGxKnowledge(rawDir: string): Promise<ExportCounts> {
     for (const module of modules) {
       if (!["preread", "postread", "text"].includes(String(module.type))) continue;
       const full = await db.collection("modules").findOne({ _id: module._id }, { projection: { content: 1, preread_content: 1 } });
-      const content = [full?.content, full?.preread_content ? JSON.stringify(full.preread_content) : ""].filter(Boolean).join("\n\n");
+      const content = [richTextToPlain(String(full?.content || "")), full?.preread_content ? richTextToPlain(JSON.stringify(full.preread_content)) : ""].filter(Boolean).join("\n\n");
       if (!content.trim()) continue;
       await fs.writeFile(
         path.join(rawDir, "texts", `${String(module._id)}.md`),
