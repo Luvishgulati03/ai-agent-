@@ -4,6 +4,7 @@ import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { HenryMemory } from "../memory/engram.ts";
 import type { KnowledgeBase } from "../knowledge/store.ts";
+import { classifyIntentTier } from "./intent.ts";
 import { detectKnowledgeDomain } from "../knowledge/router.ts";
 import { ProviderRunner, type RunOptions } from "../providers/runner.ts";
 import { redactSecrets } from "../util/env.ts";
@@ -88,20 +89,28 @@ export class HenryAgent {
     const runId = randomUUID();
     // Surface sessions (latency §11.5): resumed turns send a slim prompt — the
     // provider session already holds the static soul/persona blocks.
-    const session = options.surface ? this.runner.acquireSession(options.surface, options.provider) : undefined;
+    // Trivial chatter rides t0 (latency §11.5 #5); explicit caller tier always wins.
+    const tier = options.tier ?? classifyIntentTier(prompt);
+    // t0 turns bypass sessions: resuming a session with a different --model is
+    // rejected by claude, and a fresh haiku one-off is fast enough by itself.
+    const surface = tier === "t0" ? undefined : options.surface;
+    const session = surface ? this.runner.acquireSession(surface, options.provider) : undefined;
     const fullPrompt = await this.buildPrompt(prompt, runId, session ? session.fresh : true);
-    let result = await this.runner.run(fullPrompt, { ...options, session, onEvent: (event) => options.onEvent?.(event) });
-    if (options.surface && session && !session.fresh && (result as { sessionReset?: boolean }).sessionReset) {
+    let result = await this.runner.run(fullPrompt, { ...options, surface, tier, session, onEvent: (event) => options.onEvent?.(event) });
+    if (surface && session && !session.fresh && (result as { sessionReset?: boolean }).sessionReset) {
       // Provider evicted the session mid-stream: rebuild fresh once with the full prompt.
-      const retrySession = this.runner.acquireSession(options.surface, options.provider);
+      const retrySession = this.runner.acquireSession(surface, options.provider);
       const retryPrompt = await this.buildPrompt(prompt, runId, true);
-      result = await this.runner.run(retryPrompt, { ...options, session: retrySession, onEvent: (event) => options.onEvent?.(event) });
+      result = await this.runner.run(retryPrompt, { ...options, surface, tier, session: retrySession, onEvent: (event) => options.onEvent?.(event) });
     }
     if (result.response.trim()) {
-      await this.memory.remember(redactSecrets(`Dad asked: ${prompt}\n\nHenry answered:\n${result.response}`), {
+      // Fire-and-forget (latency §11.5 #4): the reply reaches Dad immediately; capture
+      // finishes in the background. A process exiting instantly after a turn may drop
+      // this one capture — acceptable for interactive speed.
+      void this.memory.remember(redactSecrets(`Dad asked: ${prompt}\n\nHenry answered:\n${result.response}`), {
         source: `captured/${new Date().toISOString().slice(0, 10)}-conversation.md`,
         tier: "episodic", importance: 5, metadata: { runId, provider: result.provider },
-      });
+      }).catch((error) => void this.activity.record("run.failed", "Post-turn memory capture failed", { error: String(error) }, { runId }));
     }
     return result;
   }
