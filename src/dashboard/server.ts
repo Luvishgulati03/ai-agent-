@@ -65,6 +65,19 @@ async function observatoryHtml(): Promise<string> {
   return observatoryHtmlCache;
 }
 
+// The holographic memory display is hand-rolled 3D canvas code. Same reasoning
+// as the observatory above: it ships as a plain .js asset instead of living
+// inside page.ts's template literal, where backticks/${...}/backslashes would
+// be a live escaping hazard. Cached for the process lifetime; failures are not
+// cached so a fixed file recovers on the next request.
+const HOLO_JS_PATH = fileURLToPath(new URL("./holo.js", import.meta.url));
+let holoJsCache: string | null = null;
+
+async function holoJs(): Promise<string> {
+  holoJsCache ??= await fs.readFile(HOLO_JS_PATH, "utf8");
+  return holoJsCache;
+}
+
 function json(response: http.ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   response.end(JSON.stringify(value));
@@ -108,6 +121,11 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
       if (request.method === "GET" && (url.pathname === "/memory" || url.pathname === "/memory/")) {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
         response.end(await observatoryHtml());
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/holo.js") {
+        response.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store" });
+        response.end(await holoJs());
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/health") { json(response, 200, { ok: true, timestamp: new Date().toISOString() }); return; }
