@@ -14,10 +14,41 @@ function sseWrite(response: http.ServerResponse, event: string, data: unknown): 
   response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-// Lazily constructed and cached: KnowledgeBase loads a local embedding model on
-// construction, so it must be created at most once for the life of the process,
-// never per-request.
+// Lazily constructed and cached: constructing KnowledgeBase is cheap (the local
+// embedding model is lazy-loaded on first `embed()` call, not on construction —
+// see src/embeddings.ts), but `engine.stats()` runs several synchronous
+// better-sqlite3 queries (COUNT/GROUP BY over the whole table) that measured
+// ~300-400ms cold on a ~19k-row knowledge.db and ~1-2ms once the SQLite page
+// cache is warm. better-sqlite3 is synchronous, so that first call blocks the
+// whole Node event loop — starving every other in-flight request (including
+// /api/status and the SSE handshake) for its duration. To keep /api/knowledge
+// off the hot path we never do this work inline on a request: the first
+// request kicks off construction+stats() in the background via setImmediate
+// (so it runs after the current response is flushed) and replies
+// {loading:true} immediately; once the background job finishes, the computed
+// stats are cached and every subsequent request (including later polls of the
+// same loading request) returns them instantly.
 let knowledgeBaseCache: KnowledgeBase | null = null;
+let knowledgeStatsCache: Record<string, unknown> | null = null;
+let knowledgeStatsError: string | null = null;
+let knowledgeInitStarted = false;
+
+function startKnowledgeInit(runtime: HenryRuntime): void {
+  if (knowledgeInitStarted) return;
+  knowledgeInitStarted = true;
+  setImmediate(() => {
+    try {
+      knowledgeBaseCache ||= new KnowledgeBase(runtime.config);
+      knowledgeStatsCache = knowledgeBaseCache.stats();
+      knowledgeStatsError = null;
+    } catch (error) {
+      knowledgeStatsError = error instanceof Error ? error.message : String(error);
+    } finally {
+      // Allow a later retry (e.g. db appeared after a failed access check).
+      if (knowledgeStatsError) knowledgeInitStarted = false;
+    }
+  });
+}
 
 function json(response: http.ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -109,13 +140,16 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
       }
       if (request.method === "GET" && url.pathname === "/api/settings") { json(response, 200, { provider: runtime.config.provider }); return; }
       if (request.method === "GET" && url.pathname === "/api/knowledge") {
+        if (knowledgeStatsCache) { json(response, 200, { stats: knowledgeStatsCache }); return; }
+        if (knowledgeStatsError) { json(response, 200, { stats: null, error: knowledgeStatsError }); return; }
         try {
           await fs.access(runtime.config.knowledgeDbPath);
-          knowledgeBaseCache ||= new KnowledgeBase(runtime.config);
-          json(response, 200, { stats: knowledgeBaseCache.stats() });
         } catch (error) {
           json(response, 200, { stats: null, error: error instanceof Error ? error.message : String(error) });
+          return;
         }
+        startKnowledgeInit(runtime);
+        json(response, 200, { stats: null, loading: true });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/covers") {
