@@ -1,10 +1,24 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import { Cron } from "croner";
 import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { HenryMemory } from "../memory/engram.ts";
 import type { GmailService } from "../integrations/gmail.ts";
 import type { WorkflowDefinition } from "../types.ts";
+
+/** Reads the pid recorded in a lock file; returns undefined if absent/unreadable. */
+async function readLockPid(lockPath: string): Promise<number | undefined> {
+  try {
+    const pid = Number((await fs.readFile(lockPath, "utf8")).trim());
+    return Number.isFinite(pid) ? pid : undefined;
+  } catch { return undefined; }
+}
+
+/** Signal 0 checks liveness without killing the process. */
+function isPidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
 
 export class WorkflowScheduler {
   private jobs: Array<{ definition: WorkflowDefinition; cron: Cron }> = [];
@@ -37,12 +51,46 @@ export class WorkflowScheduler {
       let result: unknown;
       if (definition.kind === "memory.dream") result = await this.memory.dream();
       else if (definition.kind === "gmail.inbox") result = await this.gmail.inbox(20);
+      else if (definition.kind === "knowledge.distill") result = await this.runKnowledgeDistill(definition);
       else result = { skipped: true, reason: "agent.prompt workflows require an orchestrator callback" };
       await this.activity.record("workflow.completed", `Workflow ${definition.id} completed`, { result });
       return result;
     } catch (error) {
       await this.activity.record("workflow.failed", `Workflow ${definition.id} failed`, { error: String(error) });
       throw error;
+    }
+  }
+
+  /**
+   * Distills GrowthX Learn modules into strategy cards. The KnowledgeBase (and its
+   * resident embedding model) is constructed fresh for this one run and closed
+   * before returning — the scheduler daemon may run for days between nightly
+   * firings, so nothing about knowledge distillation should stay resident in
+   * memory the rest of the time. A pid lock file guards data/knowledge.db against
+   * concurrent writers (e.g. an overlapping manual run).
+   */
+  private async runKnowledgeDistill(definition: WorkflowDefinition): Promise<unknown> {
+    const lockPath = path.join(this.config.dataDir, "knowledge.lock");
+    const heldPid = await readLockPid(lockPath);
+    if (heldPid !== undefined && isPidAlive(heldPid)) {
+      return { skipped: true, reason: "knowledge.distill already running", pid: heldPid };
+    }
+    await fs.mkdir(this.config.dataDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(lockPath, String(process.pid), { encoding: "utf8", mode: 0o600 });
+    try {
+      const { KnowledgeBase } = await import("../knowledge/store.ts");
+      const { KnowledgeIngestor } = await import("../knowledge/ingest.ts");
+      const { ProviderRunner } = await import("../providers/runner.ts");
+      const kb = new KnowledgeBase(this.config);
+      try {
+        const runner = new ProviderRunner(this.config, this.activity);
+        const ingestor = new KnowledgeIngestor(this.config, this.activity, kb, runner);
+        return await ingestor.ingestCards({ limit: definition.batchLimit ?? 15 });
+      } finally {
+        kb.close();
+      }
+    } finally {
+      await fs.rm(lockPath, { force: true });
     }
   }
 

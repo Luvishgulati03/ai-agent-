@@ -12,5 +12,13 @@
     "cron": "*/15 * * * *",
     "kind": "gmail.inbox",
     "enabled": false
+  },
+  {
+    "id": "knowledge-distill-nightly",
+    "name": "Nightly strategy-card distillation",
+    "cron": "0 2 * * *",
+    "kind": "knowledge.distill",
+    "enabled": true,
+    "batchLimit": 25
   }
 ]
