@@ -12,6 +12,11 @@ Henry is a terminal-first personal engineering agent. Luna orchestrates the buil
 - Cron workflows for inbox polling and nightly memory maintenance.
 - Six-pass GitHub PR review with staged inline comments.
 - Luna specialist-agent dispatch for architecture, runtime, memory, dashboard, Gmail, PR review, and QA tasks.
+- Codebase task execution with local repository context.
+- Provider toggle between Codex and Claude (CLI and dashboard).
+- Job application pipeline with tailored resume PDFs and approval-gated submission.
+- Cover letter generation from job descriptions with resume grounding.
+- GrowthX knowledge base (RAG module): curated domain content, local-only indexing, on-demand injection with source attribution.
 
 ## Quick start
 
@@ -30,6 +35,14 @@ Open the dashboard at http://127.0.0.1:7337.
 
 ```bash
 henry ask "summarize the current git changes"
+henry code "add unit tests for the auth module" --cwd /path/to/repo
+henry provider claude
+henry jobs inspect "https://boards.greenhouse.io/example/jobs/123"
+henry jobs prepare "https://boards.greenhouse.io/example/jobs/123"
+henry cover import /path/to/resume.docx
+henry cover "https://example.com/job-posting"
+henry knowledge search "GTM strategies for B2B SaaS" --domain gtm
+henry knowledge stats
 henry review 123 --repo /path/to/repo
 henry dispatch pr-review "review the current pull request"
 henry memory search "what did we decide about deploys?"

@@ -1,6 +1,14 @@
 import http from "node:http";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { DASHBOARD_HTML } from "./page.ts";
+import { KnowledgeBase } from "../knowledge/store.ts";
 import type { HenryRuntime } from "../runtime.ts";
+
+// Lazily constructed and cached: KnowledgeBase loads a local embedding model on
+// construction, so it must be created at most once for the life of the process,
+// never per-request.
+let knowledgeBaseCache: KnowledgeBase | null = null;
 
 function json(response: http.ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -51,6 +59,34 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
         json(response, 200, { summary: await runtime.jobs.store.summary(), applications: await runtime.jobs.store.list() }); return;
       }
       if (request.method === "GET" && url.pathname === "/api/settings") { json(response, 200, { provider: runtime.config.provider }); return; }
+      if (request.method === "GET" && url.pathname === "/api/knowledge") {
+        try {
+          await fs.access(runtime.config.knowledgeDbPath);
+          knowledgeBaseCache ||= new KnowledgeBase(runtime.config);
+          json(response, 200, { stats: knowledgeBaseCache.stats() });
+        } catch (error) {
+          json(response, 200, { stats: null, error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/covers") {
+        const dir = path.join(runtime.config.dataDir, "cover-letters");
+        try {
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          const files = await Promise.all(
+            entries.filter((entry) => entry.isFile()).map(async (entry) => {
+              const stat = await fs.stat(path.join(dir, entry.name));
+              return { name: entry.name, size: stat.size, mtime: stat.mtime.toISOString() };
+            }),
+          );
+          files.sort((a, b) => (a.mtime < b.mtime ? 1 : a.mtime > b.mtime ? -1 : 0));
+          json(response, 200, files);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") { json(response, 200, []); return; }
+          throw error;
+        }
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/memory/graph") { json(response, 200, runtime.memory.graph()); return; }
       if (request.method === "GET" && url.pathname === "/api/memory/recall") {
         const query = url.searchParams.get("q") || "";
