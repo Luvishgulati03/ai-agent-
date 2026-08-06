@@ -50,13 +50,34 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
   let quitting = false;
 
   async function runAgentTurn(value: string, label?: string): Promise<void> {
-    const spinner = setInterval(() => process.stdout.write("."), 3000);
-    process.stdout.write("henry is thinking");
+    // Streaming display (latency plan #1/#6): print provider text as it
+    // arrives; the spinner shows elapsed seconds until the first token lands.
+    const started = Date.now();
+    let streamedChars = 0;
+    const spinner = setInterval(() => {
+      if (streamedChars === 0) process.stdout.write(`\rhenry is thinking… ${Math.round((Date.now() - started) / 1000)}s `);
+    }, 1000);
+    process.stdout.write("henry is thinking… ");
     try {
-      const result = await runtime.agent.run(value);
-      console.log();
-      if (label) console.log(label);
-      print(result.response);
+      const result = await runtime.agent.run(value, {
+        onEvent: (event) => {
+          const text = event.parsed && typeof (event.parsed as Record<string, unknown>).text === "string"
+            ? String((event.parsed as Record<string, unknown>).text)
+            : undefined;
+          if (!text?.trim()) return;
+          if (streamedChars === 0) { process.stdout.write("\r" + " ".repeat(28) + "\r"); if (label) console.log(label); }
+          process.stdout.write(text.endsWith("\n") ? text : text + "\n");
+          streamedChars += text.length;
+        },
+      });
+      if (streamedChars === 0) {
+        process.stdout.write("\r" + " ".repeat(28) + "\r");
+        if (label) console.log(label);
+        print(result.response);
+      } else if (result.response.length > streamedChars + 80) {
+        // The final joined response contained more than what streamed — print the remainder context safely.
+        console.log();
+      }
     } catch (error) {
       console.log();
       console.error(error instanceof Error ? error.message : String(error));
