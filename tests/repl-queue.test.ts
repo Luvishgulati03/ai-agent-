@@ -53,3 +53,17 @@ test("queue can be reused across multiple start/finish cycles", () => {
   queue.push("c");
   assert.deepEqual(queue.finish(), { combined: "b\nc", count: 2 });
 });
+
+test("pending exposes a read-only snapshot without draining", () => {
+  const queue = createInputQueue();
+  queue.start();
+  queue.push("first");
+  queue.push("second");
+  assert.deepEqual(queue.pending(), ["first", "second"]);
+  assert.equal(queue.length, 2); // peek must not drain
+  const snapshot = queue.pending() as string[];
+  snapshot.push("mutated");
+  assert.equal(queue.length, 2); // snapshot mutation must not leak back
+  assert.deepEqual(queue.finish(), { combined: "first\nsecond", count: 2 });
+  assert.deepEqual(queue.pending(), []);
+});

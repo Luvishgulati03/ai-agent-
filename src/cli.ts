@@ -58,8 +58,20 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
     // arrives; the spinner shows elapsed seconds until the first token lands.
     const started = Date.now();
     let streamedChars = 0;
+    // The spinner's \r-rewrite and readline's echo fight over the same terminal
+    // line — typing mid-think LOOKED dead (input visually erased every second)
+    // even though the queue captured it. Truce: on the user's first keypress the
+    // spinner goes silent for the rest of the run and the line is handed back as
+    // a preserved `henry> ` prompt, so queueing is visible while Henry thinks.
+    let userTyping = false;
+    const onKeypress = (_ch: unknown, key: { name?: string } | undefined): void => {
+      if (userTyping || key?.name === "return" || key?.name === "enter") return;
+      userTyping = true;
+      setImmediate(() => { process.stdout.write("\r" + " ".repeat(28) + "\r"); safePrompt(true); });
+    };
+    input.on("keypress", onKeypress);
     const spinner = setInterval(() => {
-      if (streamedChars === 0) process.stdout.write(`\rhenry is thinking… ${Math.round((Date.now() - started) / 1000)}s `);
+      if (streamedChars === 0 && !userTyping) process.stdout.write(`\rhenry is thinking… ${Math.round((Date.now() - started) / 1000)}s `);
     }, 1000);
     process.stdout.write("henry is thinking… ");
     try {
@@ -69,7 +81,11 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
             ? String((event.parsed as Record<string, unknown>).text)
             : undefined;
           if (!text?.trim()) return;
-          if (streamedChars === 0) { process.stdout.write("\r" + " ".repeat(28) + "\r"); if (label) console.log(label); }
+          if (streamedChars === 0) {
+            // If the user owns the line, keep their draft intact above and stream below.
+            process.stdout.write(userTyping ? "\n" : "\r" + " ".repeat(28) + "\r");
+            if (label) console.log(label);
+          }
           process.stdout.write(text.endsWith("\n") ? text : text + "\n");
           streamedChars += text.length;
         },
@@ -87,6 +103,7 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
       console.error(error instanceof Error ? error.message : String(error));
     } finally {
       clearInterval(spinner);
+      input.removeListener("keypress", onKeypress);
     }
   }
 
@@ -109,10 +126,15 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
   rl.on("line", (line) => {
     const value = line.trim();
     if (quitting) return; // ignore stray input after :quit was requested
-    if (!value) { if (!queue.busy) safePrompt(); return; }
+    if (!value) { safePrompt(queue.busy); return; }
 
     if (queue.busy) {
       if (value === ":help") { console.log(REPL_HELP); safePrompt(true); return; }
+      if (value === ":queue") {
+        console.log(queue.length ? queue.pending().map((l, i) => `\x1b[2m ${i + 1}. ${l}\x1b[0m`).join("\n") : "\x1b[2mqueue empty\x1b[0m");
+        safePrompt(true);
+        return;
+      }
       if (value === ":dashboard") { console.log(`Dashboard: http://${runtime.config.host}:${runtime.config.port}`); safePrompt(true); return; }
       if (value === ":quit" || value === ":exit") {
         quitting = true;

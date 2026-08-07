@@ -22,6 +22,8 @@ export interface InputQueue {
    * count and clears the buffer; returns `undefined` when nothing was queued.
    */
   finish(): DrainResult | undefined;
+  /** Read-only view of the buffered lines (for the `:queue` command). */
+  pending(): readonly string[];
 }
 
 export function createInputQueue(): InputQueue {
@@ -43,5 +45,6 @@ export function createInputQueue(): InputQueue {
       queue = [];
       return { combined, count };
     },
+    pending(): readonly string[] { return [...queue]; },
   };
 }
