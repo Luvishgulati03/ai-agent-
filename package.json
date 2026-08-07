@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "better-sqlite3": "12.11.1",
     "croner": "^9.0.0",
     "dotenv": "^16.4.7",
     "engram-memory": "github:anmolm-growthx/engram-memory#70453fd",
@@ -26,6 +27,7 @@
     "playwright": "^1.62.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.13.4",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"

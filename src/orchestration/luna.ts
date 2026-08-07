@@ -59,6 +59,10 @@ export class LunaOrchestrator {
     const result = await this.runner.run(prompt, {
       cwd: options.cwd || this.config.rootDir,
       role: selected,
+      // Resumable workers: each specialist role rides a per-surface provider session,
+      // so a disconnected worker's context survives restarts — the next dispatch of
+      // the same role resumes the same provider session instead of starting cold.
+      surface: `luna::${selected}`,
       readOnly: !options.allowEdits,
       ...(tier ? { tier } : {}),
       ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
