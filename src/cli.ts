@@ -34,6 +34,28 @@ function print(value: unknown): void {
 const REPL_HELP = ":status  :dashboard  :memory <query>  :provider [codex|claude]  :quit";
 
 /**
+ * Dad's rule: the dashboard comes up with every interactive Henry, not just `henry dashboard`.
+ * It must never take the REPL down with it. `startDashboard` throws synchronously on a bad
+ * remote-host config, and `server.listen` emits EADDRINUSE asynchronously when a second Henry
+ * (or the scheduler daemon) already holds the port — with no handler that's an uncaught
+ * exception. Both degrade to one printed line here. `HENRY_NO_DASHBOARD=1` opts out entirely.
+ */
+function startDashboardBeside(runtime: HenryRuntime): void {
+  if (process.env.HENRY_NO_DASHBOARD === "1") return;
+  const url = `http://${runtime.config.host}:${runtime.config.port}`;
+  try {
+    const server = startDashboard(runtime);
+    server.on("listening", () => console.log(`Henry dashboard: ${url}`));
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") console.log(`Henry dashboard: ${url} (already running — reusing it)`);
+      else console.log(`Henry dashboard unavailable: ${error.message}`);
+    });
+  } catch (error) {
+    console.log(`Henry dashboard unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * Friday-style buffer-and-drain REPL: while an agent turn is in flight (queue.busy), new
  * lines are buffered instead of racing it. Only `:help`/`:dashboard` are "trivially safe"
  * enough to answer instantly even while busy — everything else (including `:status`/
@@ -183,8 +205,29 @@ async function main(): Promise<void> {
       const prompt = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
       if (!prompt) throw new Error("Usage: henry ask <prompt>");
       print((await runtime.agent.run(prompt, { surface: "repl", provider: option("--provider") as "codex" | "claude" | undefined })).response);
+    } else if (command === "jd") {
+      // JD → tailored resume PDF (formatting locked) + cover letter, one folder.
+      const filePath = option("--file");
+      let jdText = filePath ? await fs.readFile(filePath, "utf8") : args.slice(1).filter((a) => !a.startsWith("--") && a !== filePath).join(" ");
+      if (jdText.trim().length < 80) {
+        console.log("Paste the job description below, then a line containing only END:");
+        jdText = await new Promise<string>((resolve) => {
+          const rl = readline.createInterface({ input });
+          const buffer: string[] = [];
+          rl.on("line", (line) => { if (line.trim() === "END") rl.close(); else buffer.push(line); });
+          rl.on("close", () => resolve(buffer.join("\n")));
+        });
+      }
+      console.log("tailoring resume + writing cover letter… (this takes a minute or two)");
+      const out = await runtime.tailor.run(jdText);
+      console.log(`\n${out.role} at ${out.company}`);
+      for (const change of out.changes) console.log(`  · ${change}`);
+      console.log(`\nresume: ${out.resumePdf}\ncover:  ${out.coverPdf}`);
+      const { spawn } = await import("node:child_process");
+      spawn("open", [out.dir], { stdio: "ignore" }).once("error", () => {});
     } else if (command === "repl") {
       keepAlive = true;
+      startDashboardBeside(runtime);
       let redrawPrompt: () => void = () => {};
       const ticker = startReminderTicker(runtime.reminders, runtime.activity, {
         role: "repl",

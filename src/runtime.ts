@@ -13,6 +13,7 @@ import { WorkflowScheduler } from "./scheduler/scheduler.ts";
 import { PullRequestReviewer } from "./pr/review.ts";
 import { JobApplicationService } from "./jobs/service.ts";
 import { CoverLetterService } from "./jobs/cover.ts";
+import { TailoredApplicationService } from "./jobs/tailor.ts";
 import { MeetingShadowService } from "./meetings/service.ts";
 import { ScreenshotSorterService } from "./screenshots/service.ts";
 import { ResumeEditorService } from "./jobs/resume-editor.ts";
@@ -37,6 +38,7 @@ export class HenryRuntime {
   readonly reviewer: PullRequestReviewer;
   readonly jobs: JobApplicationService;
   readonly cover: CoverLetterService;
+  readonly tailor: TailoredApplicationService;
   readonly resumeEditor: ResumeEditorService;
   readonly meetings: MeetingShadowService;
   readonly screenshots: ScreenshotSorterService;
@@ -79,6 +81,7 @@ export class HenryRuntime {
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
+    this.tailor = new TailoredApplicationService(config, this.activity, this.agent.providerRunner, this.cover);
     this.resumeEditor = new ResumeEditorService(config, this.activity, this.memory, this.agent.providerRunner);
     this.meetings = new MeetingShadowService(config, this.activity, this.memory, this.agent.providerRunner);
     this.screenshots = new ScreenshotSorterService(config, this.activity, this.agent.providerRunner);

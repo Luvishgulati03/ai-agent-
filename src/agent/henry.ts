@@ -88,6 +88,8 @@ export class HenryAgent {
       "- launch intake \"<brief|repo path>\" (playbook-cited question file at data/launches/<slug>/intake.md; Dad fills ANSWER: blanks) · launch run <slug> (parallel gtm-strategist + auditor + competition crew -> dossier.md) · launch list (phases).",
       "- Application answers: when Dad shares job-application questions (pasted text OR a screenshot path — Read the image), write paste-ready first-person answers yourself. FIRST read skills/job-application/SKILL.md and follow it exactly (ground only in resume.md + application-profile.md; you ARE the flagship project — describe your own real architecture; never invent metrics).",
       "- Portfolio edits: Dad's live portfolio is the SEPARATE repo /Users/luvishgulati/dev/portfolio (one self-contained index.html; live at https://luvishgulati03.github.io). When Dad asks for portfolio changes: edit that file (facts ONLY from its content-dossier.md; keep zero external requests/frameworks), verify with `node /Users/luvishgulati/dev/portfolio/scripts/audit.mjs` run from THIS repo root (needs its Playwright; all checks must PASS), commit locally in that repo — then STOP and report the diff. `git push` there publishes to the public site: do it ONLY after Dad's explicit go for that specific change (approve ≠ execute).",
+      "- jd --file <path> (or bare `jd`, paste, END): when Dad pastes a job description or asks to tailor his resume for a role, RUN this — it rewrites resume CONTENT to the JD with formatting/structure/facts locked (number-guard blocks invented metrics), renders his exact PDF template, and generates the cover letter into one data/applications/ folder. Report the folder path and the changes list.",
+      "- Self-maintenance git: you may commit your own reviewed changes in THIS repo with repo-style messages. You are authorized to push ONLY to remote `personal` (github.com/Luvishgulati03/ai-agent-, account Luvishgulati03) — never to any other remote, repo, or account.",
       "- mailwatch check/status: the scheduler daemon already runs this every 45min read-only (mail.watch in workflows/defaults.json), notifying on shortlisting/interview/assessment/offer emails. The same scans classify application emails (LinkedIn/Naukri/portals) into data/job-tracker.md (Dad-readable) + .json (canonical) — mailwatch tracker reports it; mailwatch backfill --days 30 seeds it once from inbox history if thin or empty.",
       "\n--- soul.md (non-negotiable operating contract) ---\n", soul,
       "\n--- personality.md ---\n", persona,
@@ -96,7 +98,7 @@ export class HenryAgent {
       "\n--- recalled Engram context ---\n", context,
       ...(knowledgeBlock ? ["\n", knowledgeBlock] : []),
       "\n--- Dad's request ---\n", prompt,
-      "\nReturn a clear answer and state any action that was intentionally staged for approval.",
+      "\nBE CONCISE: answer directly, then stop. No boilerplate status footers — mention approvals, commits, or staged items ONLY when one actually exists or needs Dad's decision right now; never say 'nothing staged/no outbound/not committed' as a routine sign-off. Detail only when Dad asks for it.",
     ];
     return [...(fresh ? staticBlocks : slimHeader), ...dynamicTail].join("\n");
   }
