@@ -75,8 +75,32 @@ export class HenryMemory {
     return results;
   }
 
-  async context(query: string, k = 8): Promise<string> {
-    return this.engine.toContextBlock(await this.recall(query, k));
+  /**
+   * Budgeted context injection (latency §11.5 #3 / memory plan #5). The unbudgeted
+   * version injected full memory bodies — a live turn measured promptChars 67k from
+   * 8 memories. Rules: drop weak hits (score floor) instead of padding to k, cap each
+   * memory's excerpt, cap the whole block. Distractor memories actively hurt recall
+   * quality (LongMemEval), so lean is correct as well as fast.
+   */
+  async context(query: string, k = 8, options: { charBudget?: number; perMemoryChars?: number; minScore?: number } = {}): Promise<string> {
+    const charBudget = options.charBudget ?? 4000;
+    const perMemoryChars = options.perMemoryChars ?? 700;
+    const minScore = options.minScore ?? 0.015;
+    const results = (await this.recall(query, k)).filter((r) => r.score >= minScore);
+    if (!results.length) return "";
+    const lines: string[] = [];
+    let used = 0;
+    for (const result of results) {
+      const body = result.content.length > perMemoryChars
+        ? `${result.content.slice(0, perMemoryChars)}… [truncated; full memory: ${result.source}]`
+        : result.content;
+      const block = `[memory ${result.id} · ${result.tier ?? "episodic"} · why: ${result.why ?? "relevant"}]
+${body}`;
+      if (used + block.length > charBudget) break;
+      lines.push(block);
+      used += block.length;
+    }
+    return lines.join("\n\n");
   }
 
   async remember(content: string, input: { source?: string; tier?: string; importance?: number; metadata?: Record<string, unknown> } = {}): Promise<string> {
