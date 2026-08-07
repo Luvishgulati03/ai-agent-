@@ -107,6 +107,26 @@ test("a child that finishes inside its envelope is unaffected", async () => {
   assert.equal(result.error, undefined);
 });
 
+test("execute() records firstEventMs on the first stdout line, and firstTextMs stays null when nothing parses as JSON (latency §11.5 round 2)", async () => {
+  const result = await execute("echo", ["hello"], os.tmpdir(), "codex", { timeoutMs: 10_000 });
+  assert.equal(typeof result.firstEventMs, "number");
+  assert.equal(result.firstTextMs, null);
+});
+
+test("execute() records firstTextMs from the first stdout line whose parsed JSON carries text (latency §11.5 round 2)", async () => {
+  const result = await execute(
+    "node",
+    ["-e", "console.log(JSON.stringify({ text: 'hi' }))"],
+    os.tmpdir(),
+    "codex",
+    { timeoutMs: 10_000 },
+  );
+  assert.equal(result.exitCode, 0);
+  assert.equal(typeof result.firstEventMs, "number");
+  assert.equal(typeof result.firstTextMs, "number");
+  assert.ok((result.firstEventMs as number) <= (result.firstTextMs as number));
+});
+
 async function testRunner(admission: AdmissionController): Promise<{ runner: ProviderRunner; events: () => Promise<ActivityEvent[]> }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "henry-runner-"));
   const activity = new ActivityLog(path.join(root, "activity.jsonl"));

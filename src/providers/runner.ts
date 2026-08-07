@@ -121,6 +121,11 @@ export async function execute(
   const events: ProviderEvent[] = [];
   const stdoutText: string[] = [];
   const stderrText: string[] = [];
+  // Phase timings (latency §11.5 round 2): let slowness be diagnosed from the
+  // activity log/dashboard without new UI. Both stay null if the run never
+  // produced the corresponding event before completion/timeout.
+  let firstEventMs: number | null = null;
+  let firstTextMs: number | null = null;
   const child = spawn(command, args, {
     cwd,
     env: safeEnvironment(provider, { CI: "1", HENRY_RUN_ID: runId }),
@@ -131,6 +136,14 @@ export async function execute(
     const parsed = stream === "stdout" ? parseJsonLine(text) : undefined;
     const event: ProviderEvent = { timestamp: now(), stream, text, ...(parsed ? { parsed } : {}) };
     events.push(event);
+    if (stream === "stdout") {
+      if (firstEventMs === null) firstEventMs = Date.now() - started;
+      if (firstTextMs === null && parsed) {
+        const extracted: string[] = [];
+        collectText(parsed, extracted);
+        if (extracted.some((piece) => piece.trim())) firstTextMs = Date.now() - started;
+      }
+    }
     options.onEvent?.(event);
   };
 
@@ -169,7 +182,7 @@ export async function execute(
       clearTimers();
       resolve({
         runId, provider, response: "", exitCode: null, durationMs: Date.now() - started,
-        error: error.message, events,
+        error: error.message, events, firstEventMs, firstTextMs,
       });
     });
     child.once("close", (exitCode) => {
@@ -181,12 +194,12 @@ export async function execute(
       if (timedOut) {
         resolve({
           runId, provider, response, exitCode: null, durationMs: Date.now() - started,
-          error: ENVELOPE_TIMEOUT_ERROR, events,
+          error: ENVELOPE_TIMEOUT_ERROR, events, firstEventMs, firstTextMs,
         });
         return;
       }
       const error = exitCode === 0 ? undefined : stderrText.join("").trim() || `Provider exited with code ${exitCode}`;
-      resolve({ runId, provider, response, exitCode, durationMs: Date.now() - started, ...(error ? { error } : {}), events });
+      resolve({ runId, provider, response, exitCode, durationMs: Date.now() - started, ...(error ? { error } : {}), events, firstEventMs, firstTextMs });
     });
   });
 }
@@ -356,7 +369,13 @@ export class ProviderRunner {
           }
           this.sessions().markUsed(options.surface, provider);
         }
-        await this.activity.record("run.completed", `${provider} completed`, { durationMs: result.durationMs, tier: options.tier }, { runId: result.runId, provider, role: options.role });
+        await this.activity.record("run.completed", `${provider} completed`, {
+          durationMs: result.durationMs,
+          firstEventMs: result.firstEventMs ?? null,
+          firstTextMs: result.firstTextMs ?? null,
+          tier: options.tier,
+          promptChars: prompt.length,
+        }, { runId: result.runId, provider, role: options.role });
         return result;
       }
       if (options.surface && session && !session.fresh) {

@@ -52,6 +52,10 @@ export interface RunResult {
   durationMs: number;
   error?: string;
   events: ProviderEvent[];
+  /** Latency §11.5 round 2: ms from spawn to the first stdout event; null if none arrived before completion. Absent on synthetic results that never spawned a process. */
+  firstEventMs?: number | null;
+  /** Latency §11.5 round 2: ms from spawn to the first event whose parsed payload carried text; null if none arrived before completion. Absent on synthetic results that never spawned a process. */
+  firstTextMs?: number | null;
 }
 
 export interface ProviderEvent {
