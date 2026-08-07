@@ -15,10 +15,10 @@
   },
   {
     "id": "knowledge-distill-nightly",
-    "name": "Nightly strategy-card distillation",
+    "name": "Strategy-card distillation (manual/full-run mode \u2014 Dad's laptop sleeps at night)",
     "cron": "0 2 * * *",
     "kind": "knowledge.distill",
-    "enabled": true,
+    "enabled": false,
     "batchLimit": 25
   },
   {
