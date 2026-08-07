@@ -24,3 +24,7 @@ resume.md
 data/meetings/
 vendor/
 data/metrics/
+data/job-tracker.md
+data/job-tracker.json
+data/eval/last-run.json
+data/reminder-ticker.lock
