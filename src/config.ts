@@ -1,7 +1,15 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Root-anchored env loading: the global `henry` bin runs from ANY cwd, and the old
+// side-effect import ("dotenv/config") only read $CWD/.env — so `henry repl` launched
+// outside the repo silently lost every key (Telegram went mute while the terminal 🔔
+// still fired). Load the repo's own .env first, then let a cwd .env fill remaining
+// gaps (dotenv never overrides already-set vars).
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".env") });
+dotenv.config();
 
 const DEFAULT_SCREENSHOT_CATEGORIES = ["work", "design-reference", "receipts", "memes", "documents", "code", "_unsorted"];
 
