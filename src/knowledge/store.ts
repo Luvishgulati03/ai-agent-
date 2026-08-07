@@ -78,9 +78,15 @@ export class KnowledgeBase {
       perModule.set(moduleKey, seen + 1);
       return true;
     });
-    const cards = filtered.filter((r) => (r.metadata as Record<string, unknown> | null)?.layer === "card");
-    const raw = filtered.filter((r) => (r.metadata as Record<string, unknown> | null)?.layer !== "card");
-    const final = [...cards, ...raw].slice(0, k);
+    // Score-interleaved with a cards-preferred tiebreak (Henry's own field report:
+    // absolute cards-first buried every fresh import under the module-card corpus).
+    // EDGE=2.0 chosen by eval sweep 2026-08-07: recovers cards-first precision@5 (33%) while letting high-scoring imports surface (1.15/1.5 scored 25%).
+    const CARD_EDGE = 2.0;
+    const ranked = filtered
+      .map((r) => ({ r, eff: r.score * (((r.metadata as Record<string, unknown> | null)?.layer === "card") ? CARD_EDGE : 1) }))
+      .sort((a, b) => b.eff - a.eff)
+      .map((x) => x.r);
+    const final = ranked.slice(0, k);
     recordRecallEvent(this.config, { ...base, results: final.length, topScore: final[0]?.score ?? null, latencyMs: Date.now() - startedAt });
     return final;
   }
