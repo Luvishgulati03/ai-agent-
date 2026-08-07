@@ -6,6 +6,7 @@ import type { GraphExport, RecallResult } from "engram-memory";
 import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import { LocalEmbeddingProvider } from "../embeddings.ts";
+import { hashQuery, recordRecallEvent } from "../metrics/recall-metrics.ts";
 
 export class HenryMemory {
   readonly engine: Engram;
@@ -62,9 +63,14 @@ export class HenryMemory {
   }
 
   async recall(query: string, k = 8): Promise<RecallResult[]> {
-    const results = await this.engine.recall(query, {
-      k, associative: true, markUsed: true, reinforce: true,
-    });
+    const startedAt = Date.now();
+    const base = { ts: new Date().toISOString(), store: "personal" as const, queryHash: hashQuery(query), k };
+    const results = await this.engine.recall(query, { k, associative: true, markUsed: true, reinforce: true })
+      .catch((error) => {
+        recordRecallEvent(this.config, { ...base, results: 0, topScore: null, latencyMs: Date.now() - startedAt, engineError: error instanceof Error ? error.message : String(error) });
+        throw error;
+      });
+    recordRecallEvent(this.config, { ...base, results: results.length, topScore: results[0]?.score ?? null, latencyMs: Date.now() - startedAt });
     await this.activity.record("memory.recalled", `Recalled ${results.length} memories`, { query, results: results.map((r) => ({ id: r.id, why: r.why })) });
     return results;
   }

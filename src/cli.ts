@@ -278,9 +278,14 @@ async function main(): Promise<void> {
           print((await kb.recall(query, { domain: option("--domain") })).map((r) => ({ score: r.score, source: r.source, content: r.content.slice(0, 200) })));
         } else if (sub === "context") {
           print(await kb.context(args.slice(2).join(" "), { domain: option("--domain") }));
+        } else if (sub === "eval") {
+          const { runKnowledgeEval, formatEvalReport } = await import("./metrics/eval.ts");
+          const report = await runKnowledgeEval(runtime.config, kb);
+          console.log(formatEvalReport(report));
+          console.log(`\nWrote ${path.join(path.dirname(runtime.config.evalPath), "last-run.json")}`);
         } else if (sub === "stats") {
           print(kb.stats());
-        } else throw new Error("Usage: henry knowledge export|index|distill|search|context|stats");
+        } else throw new Error("Usage: henry knowledge export|index|distill|search|context|eval|stats");
       } finally { kb.close(); }
     } else if (command === "dispatch") {
       const role = args[1] || "architect";

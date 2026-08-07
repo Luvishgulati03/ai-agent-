@@ -31,6 +31,10 @@ export interface HenryConfig {
   gmailRedirectUri: string;
   knowledgeDir: string;
   knowledgeDbPath: string;
+  /** Recall-event JSONL sink for src/metrics/recall-metrics.ts (docs/dashboard-design-v2.md §C). */
+  metricsDir: string;
+  /** Seed eval queries live here; `henry knowledge eval` writes its report to last-run.json in the same directory. */
+  evalPath: string;
   jobApplicationsPath: string;
   jobProfilePath: string;
   resumeSourcePath: string;
@@ -117,6 +121,8 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     gmailRedirectUri: process.env.GMAIL_REDIRECT_URI || "http://127.0.0.1:43821/oauth2callback",
     knowledgeDir: resolveFromRoot(rootDir, env("KNOWLEDGE_DIR"), "knowledge"),
     knowledgeDbPath: path.join(dataDir, "knowledge.db"),
+    metricsDir: path.join(dataDir, "metrics"),
+    evalPath: path.join(dataDir, "eval", "queries.json"),
     jobApplicationsPath: path.join(dataDir, "job-applications.json"),
     jobProfilePath: resolveFromRoot(rootDir, env("JOB_PROFILE_PATH"), "application-profile.md"),
     resumeSourcePath: resolveFromRoot(rootDir, env("RESUME_SOURCE_PATH"), "resume.md"),

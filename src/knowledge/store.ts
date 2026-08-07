@@ -4,6 +4,7 @@ import { Engram } from "engram-memory";
 import type { RecallResult } from "engram-memory";
 import type { HenryConfig } from "../config.ts";
 import { LocalEmbeddingProvider } from "../embeddings.ts";
+import { hashQuery, recordRecallEvent } from "../metrics/recall-metrics.ts";
 
 export const KNOWLEDGE_DOMAINS = [
   "gtm", "growth-strategy", "product-management", "software-development",
@@ -44,11 +45,20 @@ export class KnowledgeBase {
    * LX-RAG-proven rules: score threshold beats pure top-K (kills false positives),
    * and capping results per module keeps the context diverse.
    */
-  async recall(query: string, options: { k?: number; domain?: string; layer?: "card" | "raw"; minScore?: number } = {}): Promise<RecallResult[]> {
+  async recall(query: string, options: { k?: number; domain?: string; layer?: "card" | "raw"; minScore?: number; markUsed?: boolean; reinforce?: boolean } = {}): Promise<RecallResult[]> {
     const k = options.k ?? 8;
     // Engram's fused hybrid scores live in a small range; 0.02 is the empirical noise floor.
     const minScore = options.minScore ?? 0.02;
-    const results = await this.engine.recall(query, { k: k * 4, associative: true, markUsed: true, reinforce: true });
+    const startedAt = Date.now();
+    const base = { ts: new Date().toISOString(), store: "knowledge" as const, queryHash: hashQuery(query), k };
+    // Both default true (unchanged behavior for every existing caller). Read-only callers —
+    // the eval harness, a future recall-lab preview — pass both false so grading/browsing never
+    // distorts salience.
+    const results = await this.engine.recall(query, { k: k * 4, associative: true, markUsed: options.markUsed ?? true, reinforce: options.reinforce ?? true })
+      .catch((error) => {
+        recordRecallEvent(this.config, { ...base, results: 0, topScore: null, latencyMs: Date.now() - startedAt, engineError: error instanceof Error ? error.message : String(error) });
+        throw error;
+      });
     // LX-RAG lesson: a declared domain BOOSTS ranking but never hard-filters —
     // hard domain filters create blind spots (community content answering a GTM query).
     const boosted = options.domain
@@ -70,7 +80,9 @@ export class KnowledgeBase {
     });
     const cards = filtered.filter((r) => (r.metadata as Record<string, unknown> | null)?.layer === "card");
     const raw = filtered.filter((r) => (r.metadata as Record<string, unknown> | null)?.layer !== "card");
-    return [...cards, ...raw].slice(0, k);
+    const final = [...cards, ...raw].slice(0, k);
+    recordRecallEvent(this.config, { ...base, results: final.length, topScore: final[0]?.score ?? null, latencyMs: Date.now() - startedAt });
+    return final;
   }
 
   /** Labeled context block so the model treats this as tried-and-tested practice, not general knowledge. */
