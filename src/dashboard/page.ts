@@ -14,6 +14,7 @@ export const DASHBOARD_HTML = `<!doctype html>
 .holo-panel .observatory-link{position:absolute;top:20px;right:26px;color:#9fe9ff;border-color:#1f4f63}
 @keyframes holoflicker{0%,92%,100%{opacity:1}93%{opacity:.72}94%{opacity:1}96%{opacity:.85}97%{opacity:1}}
 .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}.panel-head h2{margin:0 0 12px}.observatory-link{color:var(--accent);text-decoration:none;font-size:12px;font-weight:600;letter-spacing:.03em;border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}.observatory-link:hover{border-color:var(--accent);background:#242c3a}
+.stat.bad b{color:var(--bad)}.relogin-btn{background:rgba(255,202,117,.14);border:1px solid var(--warn);color:var(--warn);padding:7px 13px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap}.relogin-btn:hover{background:rgba(255,202,117,.24)}.relogin-btn:disabled{opacity:.6;cursor:default}#auth-alert-wrap{display:none}
 @media(max-width:900px){.wide,.side{grid-column:1/-1}}
 </style></head><body><main><header><div><h1>🌙 Henry</h1><div class="sub">Luna-orchestrated terminal agent · Dad's control room</div></div><div class="controls"><div class="seg" title="Primary provider"><button id="prov-codex" onclick="setProvider('codex')">Codex</button><button id="prov-claude" onclick="setProvider('claude')">Claude</button></div><button onclick="refresh()">Refresh</button></div></header>
 <section class="panel hero" id="hero">
@@ -22,11 +23,13 @@ export const DASHBOARD_HTML = `<!doctype html>
 <div class="hero-item"><span>Provider</span><b id="hero-provider">—</b></div>
 <div class="hero-item"><span>Last activity</span><b id="hero-last-activity">—</b></div>
 <div class="hero-item"><span>Pending approvals</span><b id="hero-pending">—</b></div>
+<div class="hero-item" id="auth-alert-wrap"><span>&nbsp;</span><button class="relogin-btn" id="relogin-btn" onclick="relogin()"></button></div>
 <div class="hero-item"><span>Agent-stack RAM · 5.0 GB budget</span><div class="rambar-track"><div class="rambar-fill" id="ram-bar-fill"></div></div><b id="ram-bar-label" style="font-size:11px;color:var(--muted);margin-top:2px">—</b></div>
 <div class="hero-item"><span>Memory pressure</span><span class="badge" id="mem-pressure-badge">—</span></div>
 <div class="hero-item"><span>RSS · last 60 samples</span><canvas id="sparkline" width="220" height="40"></canvas></div>
 </section>
 <section class="grid"><div class="panel full" id="status">Loading status…</div>
+<div class="panel full"><h2>Memory health</h2><div id="memory-health-body" class="muted">Loading…</div></div>
 <div class="panel wide"><h2>Ask Henry</h2><textarea id="prompt" placeholder="What should Henry investigate?"></textarea><button onclick="ask()">Run</button><pre id="answer" style="margin-top:12px"></pre></div>
 <div class="panel side"><h2>Dispatch a specialist</h2><select id="role"><option>architect</option><option>runtime</option><option>memory</option><option>dashboard</option><option>gmail</option><option>pr-review</option><option>job-application</option><option>qa</option></select><input id="task" placeholder="Task for the specialist"><button onclick="dispatch()">Dispatch</button><pre id="dispatchResult" style="margin-top:12px"></pre></div>
 <div class="panel wide"><h2>Activity</h2><div id="activity" class="scroll"></div></div>
@@ -44,6 +47,8 @@ const ACTIVITY_LIMIT=80;
 function fmtBytes(n){if(n==null||!isFinite(n))return '—';const gb=n/1024/1024/1024;if(gb>=1)return gb.toFixed(2)+' GB';return (n/1024/1024).toFixed(0)+' MB'}
 function fmtDuration(sec){if(sec==null||!isFinite(sec))return '—';sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;if(h>0)return h+'h '+m+'m';if(m>0)return m+'m '+s+'s';return s+'s'}
 function fmtWhen(iso){if(!iso)return '—';try{const d=new Date(iso);const diff=(Date.now()-d.getTime())/1000;if(diff<5)return 'just now';if(diff<60)return Math.floor(diff)+'s ago';if(diff<3600)return Math.floor(diff/60)+'m ago';return d.toLocaleTimeString()}catch{return '—'}}
+function fmtPct(n){return n==null||!isFinite(n)?'—':Math.round(n*100)+'%'}
+function fmtMs(n){return n==null||!isFinite(n)?'—':Math.round(n)+'ms'}
 function activityRow(x){return '<div class="row"><div class="tag">'+esc(x.kind)+'</div><div>'+esc(x.message)+'</div><div class="muted">'+esc(x.timestamp)+'</div></div>'}
 function renderActivityList(list){document.querySelector('#activity').innerHTML=(list||[]).map(activityRow).join('')||'<div class="muted">No activity yet.</div>'}
 async function loadActivity(){try{const a=await get('/api/activity?limit='+ACTIVITY_LIMIT);renderActivityList(a)}catch{}}
@@ -69,7 +74,17 @@ function renderResources(data){const total=data.totalRssBytes;const pct=Math.min
 const mp=data.memoryPressure;const badge=document.querySelector('#mem-pressure-badge');badge.className='badge'+(mp?' '+mp.level:'');badge.textContent=mp?mp.level.toUpperCase()+' · '+mp.freePercent+'% free':'—';
 updateAgentState(data);
 const hb=data.heartbeat||{};document.querySelector('#hero-uptime').textContent=fmtDuration(hb.uptimeSec);document.querySelector('#hero-last-activity').textContent=fmtWhen(hb.lastActivityAt);document.querySelector('#hero-pending').textContent=hb.pendingApprovals??'—';
-rssHistory.push(total);while(rssHistory.length>60)rssHistory.shift();drawSparkline()}
+rssHistory.push(total);while(rssHistory.length>60)rssHistory.shift();drawSparkline();
+renderAuthAlert(data.authAlert||null)}
+let authAlertProvider=null,authAlertKey=null;
+function renderAuthAlert(alert){const wrap=document.querySelector('#auth-alert-wrap');const btn=document.querySelector('#relogin-btn');if(!wrap||!btn)return;
+if(!alert){wrap.style.display='none';authAlertProvider=null;authAlertKey=null;return}
+authAlertProvider=alert.provider;wrap.style.display='flex';
+const key=alert.provider+'|'+alert.at;
+if(key!==authAlertKey){authAlertKey=key;btn.disabled=false;btn.textContent='⚠ '+esc(alert.provider)+' logged out — Re-login'}}
+async function relogin(){if(!authAlertProvider)return;const btn=document.querySelector('#relogin-btn');btn.disabled=true;btn.textContent='opening Terminal…';
+try{const r=await post('/api/relogin',{provider:authAlertProvider});btn.textContent=r.error?('failed — '+r.error):'opened — waiting for login…';btn.disabled=!!r.error}
+catch{btn.textContent='failed — retry';btn.disabled=false}}
 let staleTimer=null;
 function armStaleWatch(){if(staleTimer)clearTimeout(staleTimer);document.querySelector('#heartbeat-canvas').classList.remove('stale');ecg.stale=false;staleTimer=setTimeout(()=>{document.querySelector('#heartbeat-canvas').classList.add('stale');ecg.stale=true;document.querySelector('#hero-status').textContent='stale'},6000)}
 let es=null,fallbackTimer=null;
@@ -83,9 +98,25 @@ function panelError(id,msg){const el=document.querySelector('#'+id);if(el)el.inn
 function refreshStatus(){get('/api/status').then(s=>{document.querySelector('#prov-codex').classList.toggle('active',s.provider==='codex');document.querySelector('#prov-claude').classList.toggle('active',s.provider==='claude');document.querySelector('#hero-provider').textContent=esc(s.provider);document.querySelector('#status').innerHTML='<span class="stat"><b>'+esc(s.name)+'</b><span>agent</span></span><span class="stat"><b>'+esc(s.provider)+'</b><span>primary provider</span></span><span class="stat"><b>'+esc(s.approvals)+'</b><span>pending approvals</span></span><span class="stat"><b>'+esc(s.jobs?.readyForReview??0)+'</b><span>jobs to review</span></span><span class="stat"><b>'+esc(s.memory?.memories??0)+'</b><span>memories</span></span><span class="stat"><b class="ok">online</b><span>'+esc(s.dashboard)+'</span></span>'}).catch(()=>panelError('status','status unavailable — retrying…'))}
 function refreshApprovals(){get('/api/approvals').then(p=>{document.querySelector('#approvals').innerHTML=(p||[]).map(x=>'<div class="row approval"><div><b>'+esc(x.title)+'</b></div><div class="muted">'+esc(x.status)+' · '+esc(x.recipient||'')+'</div><pre>'+esc(x.body)+'</pre>'+(x.status==='pending'?'<button onclick="approve(\\''+x.id+'\\')">Approve</button>':'' )+(x.status==='approved'?'<button onclick="execute(\\''+x.id+'\\')">Send / post</button>':'')+'</div>').join('')||'<div class="muted">Nothing waiting.</div>'}).catch(()=>panelError('approvals','approvals unavailable'))}
 function refreshJobs(){get('/api/jobs').then(j=>{const sm=j.summary||{};document.querySelector('#jobstats').innerHTML='<span class="stat"><b>'+esc(sm.total??0)+'</b><span>total</span></span><span class="stat"><b>'+esc(sm.discovered??0)+'</b><span>discovered</span></span><span class="stat"><b>'+esc(sm.drafted??0)+'</b><span>drafted</span></span><span class="stat"><b>'+esc(sm.readyForReview??0)+'</b><span>ready for review</span></span><span class="stat"><b>'+esc(sm.filled??0)+'</b><span>filled</span></span><span class="stat"><b>'+esc(sm.submitted??0)+'</b><span>submitted</span></span>';document.querySelector('#jobs').innerHTML=(j.applications||[]).map(x=>'<div class="row"><div><b>'+esc(x.posting?.title)+'</b> · '+esc(x.posting?.company)+'</div><div class="muted">'+esc(x.status)+(x.approvalId?' · approval '+esc(x.approvalId):'')+(x.resumePdfPath?' · resume PDF ready':'')+'</div><div class="muted">'+esc(x.posting?.url)+'</div></div>').join('')||'<div class="muted">No job applications yet. Run: henry jobs prepare &lt;url&gt;</div>'}).catch(()=>{panelError('jobstats','—');panelError('jobs','jobs unavailable')})}
-function refreshKnowledge(){get('/api/knowledge').then(k=>{document.querySelector('#knowledge').innerHTML=k.error?'<div class="muted">'+esc(k.error)+'</div>':k.loading?'<div class="muted">Loading knowledge base…</div>':(k.stats?'<span class="stat"><b>'+esc(k.stats.count??0)+'</b><span>entries</span></span>'+Object.entries(k.stats.domains||k.stats.tiers||{}).map(([name,n])=>'<span class="stat"><b>'+esc(n)+'</b><span>'+esc(name)+'</span></span>').join(''):'<div class="muted">No knowledge base yet.</div>')}).catch(()=>panelError('knowledge','knowledge unavailable'))}
+function refreshKnowledge(){get('/api/knowledge').then(k=>{const body=k.error?'<div class="muted">'+esc(k.error)+'</div>':k.loading?'<div class="muted">Loading knowledge base…</div>':(k.stats?'<span class="stat"><b>'+esc(k.stats.count??0)+'</b><span>entries</span></span>'+Object.entries(k.stats.domains||k.stats.tiers||{}).map(([name,n])=>'<span class="stat"><b>'+esc(n)+'</b><span>'+esc(name)+'</span></span>').join(''):'<div class="muted">No knowledge base yet.</div>');
+const d=k.distillation;const pct=d&&d.totalModules?Math.round((d.distilled/d.totalModules)*100):null;
+const distillHtml=d&&d.totalModules!=null?'<div class="muted" style="margin-top:8px">Distillation: '+esc(d.distilled)+' / '+esc(d.totalModules)+' modules'+(pct!=null?' ('+pct+'%)':'')+'</div>':'';
+document.querySelector('#knowledge').innerHTML=body+distillHtml}).catch(()=>panelError('knowledge','knowledge unavailable'))}
+function refreshEngramMetrics(){get('/api/engram/metrics').then(m=>{const el=document.querySelector('#memory-health-body');if(!el)return;
+if(!m||m.available===false){el.innerHTML='<div class="muted">Recall metrics unavailable'+(m&&m.reason?': '+esc(m.reason):' — src/metrics not wired up yet.')+'</div>';return}
+const badCoverage=m.recallCoverage!=null&&m.recallCoverage<0.6;const badP95=m.p95LatencyMs!=null&&m.p95LatencyMs>2000;
+const fresh=m.indexFreshness||{};
+el.innerHTML=[
+['recall coverage',fmtPct(m.recallCoverage),badCoverage],
+['zero-result rate',fmtPct(m.zeroResultRate),false],
+['p50 latency',fmtMs(m.p50LatencyMs),false],
+['p95 latency',fmtMs(m.p95LatencyMs),badP95],
+['personal index',fmtWhen(fresh.personal),false],
+['knowledge index',fmtWhen(fresh.knowledge),false],
+['recall attempts',m.totalAttempts??'—',false],
+].map(([label,value,bad])=>'<span class="stat'+(bad?' bad':'')+'"><b>'+value+'</b><span>'+esc(label)+'</span></span>').join('')}).catch(()=>panelError('memory-health-body','memory metrics unavailable'))}
 function refreshCovers(){get('/api/covers').then(c=>{document.querySelector('#covers').innerHTML=(c||[]).map(x=>'<div class="row"><div><b>'+esc(x.name)+'</b></div><div class="muted">'+esc(Math.round((x.size||0)/1024))+' KB · '+esc(new Date(x.mtime).toLocaleString())+'</div></div>').join('')||'<div class="muted">No cover letters yet.</div>'}).catch(()=>panelError('covers','cover letters unavailable'))}
-function refresh(){refreshStatus();refreshApprovals();refreshJobs();refreshKnowledge();refreshCovers()}
+function refresh(){refreshStatus();refreshApprovals();refreshJobs();refreshKnowledge();refreshCovers();refreshEngramMetrics()}
 async function ask(){const p=document.querySelector('#prompt').value;document.querySelector('#answer').textContent='Henry is thinking…';const r=await post('/api/ask',{prompt:p});document.querySelector('#answer').textContent=r.response||r.error||JSON.stringify(r,null,2);refresh()}
 async function dispatch(){const role=document.querySelector('#role').value;const task=document.querySelector('#task').value;document.querySelector('#dispatchResult').textContent='Luna is dispatching…';const r=await post('/api/dispatch',{role,task});document.querySelector('#dispatchResult').textContent=r.response||r.error||JSON.stringify(r,null,2);refresh()}
 async function approve(id){await post('/api/approvals/'+encodeURIComponent(id)+'/approve');refresh()} async function execute(id){const r=await post('/api/approvals/'+encodeURIComponent(id)+'/execute');alert(r.result||r.error||'Done');refresh()} async function setProvider(name){const r=await post('/api/settings/provider',{provider:name});if(r.error)alert(r.error);refresh()}

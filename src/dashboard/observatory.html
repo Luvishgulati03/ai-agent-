@@ -371,6 +371,54 @@
       color: var(--faint);
     }
 
+    #henry-memory-network .hmn-select {
+      padding: 7px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--foreground);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: calc(9 * var(--baseline-font));
+      letter-spacing: 0.04em;
+    }
+
+    #henry-memory-network .hmn-select:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+
+    #henry-memory-network .hmn-tab[data-recall-store="knowledge"][aria-pressed="true"] {
+      border-color: rgba(178, 140, 255, 0.4);
+      background: rgba(178, 140, 255, 0.16);
+      color: #ecdfff;
+    }
+
+    #henry-memory-network #hmn-recall-panel {
+      padding: 16px 18px 0 18px;
+    }
+
+    #henry-memory-network #hmn-recall-panel .hmn-section-label {
+      margin-bottom: 10px;
+    }
+
+    #henry-memory-network .hmn-ring-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    #henry-memory-network .hmn-ring-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      border: 1.5px solid var(--cyan);
+      background: transparent;
+    }
+
+    #henry-memory-network .hmn-ring-dot.dim {
+      opacity: 0.5;
+    }
+
     #henry-memory-network .hmn-workspace {
       display: grid;
       grid-template-columns: minmax(0, 1.72fr) minmax(280px, 0.8fr);
@@ -1112,6 +1160,36 @@
         </div>
       </section>
 
+      <section class="hmn-toolbar" aria-label="Recall lab" id="hmn-recall-toolbar">
+        <div class="hmn-toolbar-group">
+          <span class="hmn-toolbar-label">recall lab</span>
+          <label class="hmn-search" for="hmn-recall-input" style="min-width: min(320px, 100%);">
+            <span aria-hidden="true">⌕</span>
+            <input id="hmn-recall-input" type="search" placeholder="recall a memory…" autocomplete="off" />
+          </label>
+          <button class="hmn-tab" type="button" data-recall-store="personal" aria-pressed="true">personal</button>
+          <button class="hmn-tab" type="button" data-recall-store="knowledge" aria-pressed="false">knowledge</button>
+          <select class="hmn-select" id="hmn-recall-k" aria-label="Results to return">
+            <option value="5">k = 5</option>
+            <option value="8" selected>k = 8</option>
+            <option value="15">k = 15</option>
+            <option value="25">k = 25</option>
+          </select>
+          <button class="hmn-button" type="button" id="hmn-recall-submit">recall</button>
+          <button class="hmn-button subtle" type="button" id="hmn-recall-clear">clear</button>
+        </div>
+        <div class="hmn-toolbar-group" id="hmn-edge-type-filters" aria-label="Edge-type filters">
+          <span class="hmn-toolbar-label">edges</span>
+          <button class="hmn-tab" type="button" data-edge-filter="similar" aria-pressed="true">similar</button>
+          <button class="hmn-tab" type="button" data-edge-filter="temporal_next" aria-pressed="true">temporal</button>
+          <button class="hmn-tab" type="button" data-edge-filter="about" aria-pressed="true">about</button>
+          <button class="hmn-tab" type="button" data-edge-filter="caused" aria-pressed="true">caused</button>
+          <button class="hmn-tab" type="button" data-edge-filter="supersedes" aria-pressed="true">supersedes</button>
+          <button class="hmn-tab" type="button" data-edge-filter="lesson_from" aria-pressed="true">lesson</button>
+          <button class="hmn-tab" type="button" id="hmn-archived-toggle" aria-pressed="false">show archived</button>
+        </div>
+      </section>
+
       <section class="hmn-workspace">
         <div class="hmn-panel">
           <div class="hmn-panel-head">
@@ -1145,6 +1223,10 @@
               <div class="hmn-panel-subtitle">selected node + associative neighborhood</div>
             </div>
             <div class="hmn-panel-status" id="hmn-inspector-status">selected</div>
+          </div>
+          <div id="hmn-recall-panel" class="hmn-inspector-section" hidden>
+            <div class="hmn-section-label"><span>recall lab results</span><strong id="hmn-recall-meta"></strong></div>
+            <div id="hmn-recall-results" class="hmn-result-list"></div>
           </div>
           <div class="hmn-inspector-body" id="hmn-inspector-body"></div>
         </aside>
@@ -1258,6 +1340,7 @@
       var graphShell = root.querySelector("#hmn-graph-shell");
       var ctx = canvas.getContext("2d");
       var searchInput = root.querySelector("#hmn-search-input");
+      var recallInput = root.querySelector("#hmn-recall-input");
       var visibleCount = root.querySelector("#hmn-visible-count");
       var nodeCount = root.querySelector("#hmn-node-count");
       var edgeCount = root.querySelector("#hmn-edge-count");
@@ -1313,7 +1396,13 @@
         lastPointer: null,
         pulseStart: performance.now(),
         animationToken: 0,
-        routeDomain: "gtm / product"
+        routeDomain: "gtm / product",
+        // Recall lab (dashboard-design-v2.md §A1-A2): null when no lab query has run yet;
+        // otherwise {seeds:Set<id>, activated:Set<id>} drives drawNode/drawEdges highlighting.
+        recallLab: null,
+        recallStore: "personal",
+        edgeTypeFilter: new Set(["similar", "temporal_next", "about", "caused", "supersedes", "lesson_from"]),
+        showArchived: false
       };
 
       var nodes = [];
@@ -1359,6 +1448,7 @@
           y: config.y,
           radius: config.radius || 3.4,
           locked: Boolean(config.locked),
+          archived: Boolean(config.archived),
           activation: 0,
           score: 0
         };
@@ -1531,7 +1621,8 @@
             keywords: keywords,
             x: 0.25,
             y: 0.5,
-            radius: clamp(2.6 + (importance / 10) * 4.4 + Math.log(usage + 1) * 0.9, 2.4, 9.4) * (item.archived ? 0.7 : 1)
+            radius: clamp(2.6 + (importance / 10) * 4.4 + Math.log(usage + 1) * 0.9, 2.4, 9.4) * (item.archived ? 0.7 : 1),
+            archived: Boolean(item.archived)
           });
         });
         rawEdges.forEach(function (edge) {
@@ -1669,6 +1760,10 @@
           buildKnowledge(payloads[2]);
           wirePipeline(personal);
           applyStatus(payloads[1]);
+          // Edge-type filter chips describe real associative-edge types; with no real
+          // personal nodes loaded there is nothing typed for them to filter (graceful hide).
+          var edgeFilterGroup = root.querySelector("#hmn-edge-type-filters");
+          if (edgeFilterGroup) edgeFilterGroup.style.display = personal.length ? "" : "none";
           state.selectedId = defaultSelectedId;
           baseEmptyMessage = personal.length ? null : (payloads[0]
             ? "No memories indexed yet. Run `henry memory index` to populate the associative graph."
@@ -1692,7 +1787,8 @@
         return nodes.filter(function (node) {
           var storeOk = state.storeView === "all" || node.store === state.storeView || node.store === "retrieval";
           var queryOk = !query || (node.title + " " + node.body + " " + node.keywords.join(" ")).toLowerCase().indexOf(query) > -1;
-          return storeOk && queryOk;
+          var archivedOk = state.showArchived || !node.archived;
+          return storeOk && queryOk && archivedOk;
         });
       }
 
@@ -1759,7 +1855,12 @@
       function drawEdges(visibleSet) {
         if (!state.showEdges) return;
         var activeQuery = state.search.trim().length > 0;
+        var recallLab = state.recallLab;
         edges.forEach(function (edge) {
+          // Edge-type filter chips (§A2) only ever hide *real* engram edges — the
+          // pipeline/aggregate scaffolding edges (routes/contains/derived/...) aren't
+          // any of the six typed associations the chips describe, so they stay exempt.
+          if (edge.real && !state.edgeTypeFilter.has(edge.kind)) return;
           var from = byId[edge.from];
           var to = byId[edge.to];
           if (!visibleSet.has(from.id) || !visibleSet.has(to.id)) return;
@@ -1767,7 +1868,14 @@
           var b = pointFor(to);
           var active = Math.max(from.activation, to.activation);
           var edgeColor = palette[edge.kind] || palette.edge;
-          var alpha = activeQuery ? 0.05 + active * 0.65 : 0.05 + edge.weight * 0.16;
+          var alpha;
+          if (recallLab) {
+            var fromLit = recallLab.seeds.has(from.id) || recallLab.activated.has(from.id);
+            var toLit = recallLab.seeds.has(to.id) || recallLab.activated.has(to.id);
+            alpha = fromLit && toLit ? 0.15 + edge.weight * 0.45 : 0.05;
+          } else {
+            alpha = activeQuery ? 0.05 + active * 0.65 : 0.05 + edge.weight * 0.16;
+          }
           if (from.store === "retrieval" || to.store === "retrieval") alpha += 0.16;
           ctx.save();
           ctx.strokeStyle = edgeColor.replace("rgba", "rgba").replace(/[\d.]+\)$/, clamp(alpha, 0.02, 0.9) + ")");
@@ -1789,9 +1897,17 @@
         var active = node.activation;
         var isSelected = node.id === state.selectedId;
         var isHovered = node.id === state.hoveredId;
-        var dim = state.search.trim() && active < 0.08 && !isSelected && !isHovered;
+        var recallLab = state.recallLab;
+        var isSeed = Boolean(recallLab && recallLab.seeds.has(node.id));
+        var isActivated = Boolean(recallLab && !isSeed && recallLab.activated.has(node.id));
+        var recallFaded = Boolean(recallLab && !isSeed && !isActivated);
+        // Recall lab (§A1) takes over dimming from the plain text-search preview while a
+        // lab query is live: seeds/activated stay lit, everything else fades to ~15% alpha.
+        var dim = recallLab
+          ? (recallFaded && !isSelected && !isHovered)
+          : (state.search.trim() && active < 0.08 && !isSelected && !isHovered);
         ctx.save();
-        ctx.globalAlpha = dim ? 0.16 : 0.93;
+        ctx.globalAlpha = dim ? (recallLab ? 0.15 : 0.16) : 0.93;
 
         if (active > 0.16 && state.showMotion) {
           var pulse = ((now - state.pulseStart) / 1600) % 1;
@@ -1826,7 +1942,18 @@
         ctx.strokeStyle = isSelected ? "#f6fbff" : "rgba(237, 245, 255, 0.52)";
         ctx.stroke();
 
-        var shouldLabel = isSelected || isHovered || node.radius >= 7 || node.store === "retrieval";
+        // Recall lab activation ring (§A1): seeds get a bright cyan ring, spread-activated
+        // nodes a dimmer one — drawn last so it sits on top of the halo/core for both.
+        if (isSeed || isActivated) {
+          ctx.globalAlpha = isSeed ? 1 : 0.55;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, baseRadius + (isSeed ? 6.5 : 4.5), 0, Math.PI * 2);
+          ctx.strokeStyle = palette.personal;
+          ctx.lineWidth = isSeed ? 2.4 : 1.4;
+          ctx.stroke();
+        }
+
+        var shouldLabel = isSelected || isHovered || isSeed || isActivated || node.radius >= 7 || node.store === "retrieval";
         if (shouldLabel && !dim) {
           ctx.globalAlpha = isSelected || isHovered ? 1 : 0.78;
           ctx.font = (isSelected ? "500 11px " : "10px ") + "Inter, system-ui, sans-serif";
@@ -2064,6 +2191,12 @@
         root.querySelector("[data-toggle='edges']").textContent = "edges on";
         root.querySelector("[data-toggle='motion']").setAttribute("aria-pressed", "true");
         root.querySelector("[data-toggle='motion']").textContent = "activation on";
+        state.showArchived = false;
+        var archivedToggleBtn = root.querySelector("#hmn-archived-toggle");
+        if (archivedToggleBtn) { archivedToggleBtn.setAttribute("aria-pressed", "false"); archivedToggleBtn.textContent = "show archived"; }
+        state.edgeTypeFilter = new Set(["similar", "temporal_next", "about", "caused", "supersedes", "lesson_from"]);
+        root.querySelectorAll("[data-edge-filter]").forEach(function (button) { button.setAttribute("aria-pressed", "true"); });
+        clearRecallLab();
         runRetrieval("");
       }
 
@@ -2082,6 +2215,114 @@
           return false;
         });
         return hit;
+      }
+
+      function setStoreView(value) {
+        state.storeView = value;
+        root.querySelectorAll("[data-store-view]").forEach(function (item) {
+          item.setAttribute("aria-pressed", item.getAttribute("data-store-view") === value ? "true" : "false");
+        });
+      }
+
+      function setRecallStore(value) {
+        state.recallStore = value;
+        root.querySelectorAll("[data-recall-store]").forEach(function (button) {
+          button.setAttribute("aria-pressed", button.getAttribute("data-recall-store") === value ? "true" : "false");
+        });
+      }
+
+      function clearRecallLab() {
+        state.recallLab = null;
+        var panel = root.querySelector("#hmn-recall-panel");
+        if (panel) panel.hidden = true;
+        if (recallInput) recallInput.value = "";
+        graphStatus.textContent = realNodeCount ? "warm / indexed" : "loading / engram";
+        draw();
+      }
+
+      // Maps a real POST /api/engram/recall response onto the graph's node-id space.
+      // Personal-store result ids come straight from GraphExport, so they match `byId`
+      // directly. Knowledge-store ids never do — buildKnowledge only ever plots aggregate
+      // rollup nodes (k-root/k-sources/k-tier-N), never individual chunks — so as a
+      // graceful fallback the corpus root lights up as a stand-in and the results panel
+      // carries the real per-result detail instead.
+      function applyRecallLab(payload, store) {
+        var seeds = {};
+        var activated = {};
+        ((payload.activation && payload.activation.seeds) || []).forEach(function (id) { if (byId[id]) seeds[id] = true; });
+        ((payload.activation && payload.activation.activated) || [])
+          .concat((payload.results || []).map(function (result) { return result.id; }))
+          .forEach(function (id) { if (byId[id] && !seeds[id]) activated[id] = true; });
+        if (!Object.keys(seeds).length && !Object.keys(activated).length && store === "knowledge" && byId["k-root"]) {
+          seeds["k-root"] = true;
+        }
+        state.recallLab = { seeds: new Set(Object.keys(seeds)), activated: new Set(Object.keys(activated)) };
+        state.pulseStart = performance.now();
+        draw();
+      }
+
+      function renderRecallResults(payload, store) {
+        var panel = root.querySelector("#hmn-recall-panel");
+        var list = root.querySelector("#hmn-recall-results");
+        var meta = root.querySelector("#hmn-recall-meta");
+        if (!panel || !list || !meta) return;
+        panel.hidden = false;
+        if (payload.error) {
+          meta.textContent = "error";
+          list.innerHTML = "<div class='hmn-node-copy'>" + esc(payload.error) + "</div>";
+          return;
+        }
+        var results = payload.results || [];
+        meta.textContent = results.length + " hit" + (results.length === 1 ? "" : "s") + " · " + Math.round(payload.latencyMs || 0) + "ms"
+          + (store === "knowledge" ? " · graph shows corpus aggregate only" : "");
+        list.innerHTML = results.length
+          ? results.map(function (result) {
+              return "<div class='hmn-result-item' data-recall-result-id=\"" + esc(result.id) + "\">"
+                + "<div class='hmn-result-main'>"
+                + "<div class='hmn-result-title'>" + esc(shorten(result.content, 96)) + "</div>"
+                + "<div class='hmn-result-meta'>" + esc(result.tier || store) + (result.why ? " · " + esc(result.why) : "") + "</div>"
+                + "</div>"
+                + "<div class='hmn-result-score'>" + Number(result.score).toFixed(2) + "</div>"
+                + "</div>";
+            }).join("")
+          : "<div class='hmn-node-copy'>No results for this query.</div>";
+        list.querySelectorAll("[data-recall-result-id]").forEach(function (row) {
+          row.style.cursor = "pointer";
+          row.addEventListener("click", function () {
+            var node = byId[row.getAttribute("data-recall-result-id")];
+            if (node) { state.selectedId = node.id; renderInspector(node); draw(); }
+          });
+        });
+      }
+
+      function runRecallLabQuery(query) {
+        var trimmed = (query || "").trim();
+        if (!trimmed) return;
+        var store = state.recallStore;
+        setStoreView(store);
+        var kSelect = root.querySelector("#hmn-recall-k");
+        var k = kSelect ? Number(kSelect.value) || 8 : 8;
+        var submitBtn = root.querySelector("#hmn-recall-submit");
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "recalling…"; }
+        graphStatus.textContent = "recall lab / querying";
+        fetch("/api/engram/recall", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ query: trimmed, k: k, store: store })
+        }).then(function (response) {
+          if (!response.ok) throw new Error("recall → HTTP " + response.status);
+          return response.json();
+        }).then(function (payload) {
+          applyRecallLab(payload, store);
+          renderRecallResults(payload, store);
+          graphStatus.textContent = payload.error ? "recall lab / engine error" : "recall lab / lit up";
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "recall"; }
+        }).catch(function (error) {
+          renderRecallResults({ error: error.message, results: [] }, store);
+          graphStatus.textContent = "recall lab / request failed";
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "recall"; }
+        });
       }
 
       canvas.addEventListener("pointerdown", function (event) {
@@ -2135,13 +2376,43 @@
 
       root.querySelectorAll("[data-store-view]").forEach(function (button) {
         button.addEventListener("click", function () {
-          state.storeView = button.getAttribute("data-store-view");
-          root.querySelectorAll("[data-store-view]").forEach(function (item) {
-            item.setAttribute("aria-pressed", item === button ? "true" : "false");
-          });
+          setStoreView(button.getAttribute("data-store-view"));
           draw();
         });
       });
+
+      root.querySelectorAll("[data-recall-store]").forEach(function (button) {
+        button.addEventListener("click", function () { setRecallStore(button.getAttribute("data-recall-store")); });
+      });
+
+      root.querySelectorAll("[data-edge-filter]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var type = button.getAttribute("data-edge-filter");
+          if (state.edgeTypeFilter.has(type)) { state.edgeTypeFilter.delete(type); button.setAttribute("aria-pressed", "false"); }
+          else { state.edgeTypeFilter.add(type); button.setAttribute("aria-pressed", "true"); }
+          draw();
+        });
+      });
+
+      var archivedToggle = root.querySelector("#hmn-archived-toggle");
+      if (archivedToggle) {
+        archivedToggle.addEventListener("click", function () {
+          state.showArchived = !state.showArchived;
+          archivedToggle.setAttribute("aria-pressed", String(state.showArchived));
+          archivedToggle.textContent = state.showArchived ? "hide archived" : "show archived";
+          draw();
+        });
+      }
+
+      var recallSubmitBtn = root.querySelector("#hmn-recall-submit");
+      var recallClearBtn = root.querySelector("#hmn-recall-clear");
+      if (recallSubmitBtn) recallSubmitBtn.addEventListener("click", function () { runRecallLabQuery(recallInput ? recallInput.value : ""); });
+      if (recallClearBtn) recallClearBtn.addEventListener("click", clearRecallLab);
+      if (recallInput) {
+        recallInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") { event.preventDefault(); runRecallLabQuery(recallInput.value); }
+        });
+      }
 
       root.querySelector("[data-toggle='edges']").addEventListener("click", function (button) {
         state.showEdges = !state.showEdges;

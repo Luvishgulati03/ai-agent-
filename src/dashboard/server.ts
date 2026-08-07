@@ -1,13 +1,14 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { DASHBOARD_HTML } from "./page.ts";
 import { KnowledgeBase } from "../knowledge/store.ts";
 import { sampleResources } from "./resources.ts";
 import { sharedAdmissionController } from "../orchestration/admission.ts";
 import type { HenryRuntime } from "../runtime.ts";
-import type { ActivityEvent } from "../types.ts";
+import type { ActivityEvent, ProviderName } from "../types.ts";
 
 const EVENTS_POLL_MS = 2000;
 
@@ -52,6 +53,44 @@ function startKnowledgeInit(runtime: HenryRuntime): void {
   });
 }
 
+// Distillation progress (dashboard-design-v2.md §B3): knowledge/cards/.distilled.json
+// lists already-distilled module keys; knowledge/raw/chunks.jsonl's distinct
+// module_id values are the population that could be distilled (mirrors, read-only,
+// the pending-set src/knowledge/ingest.ts#distillCards derives from — this file never
+// writes to either path). chunks.jsonl runs ~12MB/5k lines, so — same reasoning as
+// the knowledge-stats cache above — it is read once in the background via
+// setImmediate and cached rather than inline on a request.
+let distillationCache: { distilled: number; totalModules: number } | null = null;
+let distillationError: string | null = null;
+let distillationInitStarted = false;
+
+function startDistillationInit(runtime: HenryRuntime): void {
+  if (distillationInitStarted) return;
+  distillationInitStarted = true;
+  setImmediate(async () => {
+    try {
+      const cardsDir = path.join(runtime.config.knowledgeDir, "cards");
+      const rawDir = path.join(runtime.config.knowledgeDir, "raw");
+      const distilledRaw = await fs.readFile(path.join(cardsDir, ".distilled.json"), "utf8");
+      const distilledIds: unknown = JSON.parse(distilledRaw);
+      const distilled = Array.isArray(distilledIds) ? distilledIds.length : 0;
+      const chunksRaw = await fs.readFile(path.join(rawDir, "chunks.jsonl"), "utf8");
+      const modules = new Set<string>();
+      const moduleIdPattern = /"module_id"\s*:\s*"([^"]*)"/;
+      for (const line of chunksRaw.split("\n")) {
+        const match = moduleIdPattern.exec(line);
+        if (match?.[1]) modules.add(match[1]);
+      }
+      distillationCache = { distilled, totalModules: modules.size };
+      distillationError = null;
+    } catch (error) {
+      distillationError = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (distillationError) distillationInitStarted = false;
+    }
+  });
+}
+
 // The Memory Observatory is a ~2k-line designer-authored page. It is served
 // from disk rather than embedded in page.ts's template literal: that literal
 // already produced a page-killing escaping bug once, and a standalone .html
@@ -77,6 +116,75 @@ let holoJsCache: string | null = null;
 async function holoJs(): Promise<string> {
   holoJsCache ??= await fs.readFile(HOLO_JS_PATH, "utf8");
   return holoJsCache;
+}
+
+// GET /api/engram/metrics wraps src/metrics/recall-metrics.ts#summarizeRecallMetrics —
+// a module owned elsewhere (dashboard-design-v2.md §C). The field list is declared
+// locally (the exact contract, nothing beyond it) rather than imported, and the
+// module is loaded through a non-literal specifier so tsc never has to resolve it
+// statically: this endpoint verifies and fails soft to {available:false} whether
+// or not src/metrics/** has landed yet (module-doctrine.md rule 6).
+interface EngramMetricsSummary {
+  totalAttempts: number | null;
+  engineFailures: number | null;
+  healthyAttempts: number | null;
+  recallCoverage: number | null;
+  zeroResultRate: number | null;
+  avgReturned: number | null;
+  failureRate: number | null;
+  p50LatencyMs: number | null;
+  p95LatencyMs: number | null;
+  byStore: unknown;
+  indexFreshness: unknown;
+  windowDays: number | null;
+}
+
+const RECALL_METRICS_MODULE_SPECIFIER = "../metrics/recall-metrics.ts";
+
+async function engramMetricsSummary(runtime: HenryRuntime): Promise<{ available: boolean } & Partial<EngramMetricsSummary>> {
+  try {
+    const mod = (await import(RECALL_METRICS_MODULE_SPECIFIER)) as {
+      summarizeRecallMetrics?: (config: HenryRuntime["config"], windowDays?: number) => Promise<EngramMetricsSummary>;
+    };
+    if (typeof mod.summarizeRecallMetrics !== "function") return { available: false };
+    const summary = await mod.summarizeRecallMetrics(runtime.config);
+    return { available: true, ...summary };
+  } catch {
+    return { available: false };
+  }
+}
+
+const AUTH_ALERT_WINDOW_MS = 10 * 60 * 1000;
+
+/** Most recent provider auth failure in `events` (newest-first, per ActivityLog#list), or null. Powers §B1's re-login banner. */
+function scanAuthAlert(events: ActivityEvent[]): { provider: ProviderName; at: string } | null {
+  const cutoff = Date.now() - AUTH_ALERT_WINDOW_MS;
+  for (const event of events) {
+    if (event.kind !== "run.failed" || !event.provider) continue;
+    if (event.metadata?.authFailure !== true) continue;
+    const at = new Date(event.timestamp).getTime();
+    if (!Number.isFinite(at) || at < cutoff) continue;
+    return { provider: event.provider, at: event.timestamp };
+  }
+  return null;
+}
+
+const RELOGIN_COMMANDS: Record<ProviderName, string> = { codex: "codex login", claude: "claude" };
+
+/**
+ * Opens Terminal pre-typed with the provider's login command (§B1). Args are
+ * passed as an array (spawn, not a shell string) and the AppleScript string
+ * literal is built via JSON.stringify — same quoting idiom as the existing
+ * osascript call in src/reminders/service.ts.
+ */
+function relogin(provider: ProviderName): Promise<void> {
+  const command = RELOGIN_COMMANDS[provider];
+  const script = `tell application "Terminal" to do script ${JSON.stringify(command)}\ntell application "Terminal" to activate`;
+  return new Promise((resolve, reject) => {
+    const child = spawn("osascript", ["-e", script], { stdio: "ignore" });
+    child.once("error", reject);
+    child.once("close", (code) => (code === 0 ? resolve() : reject(new Error(`osascript exited ${code}`))));
+  });
 }
 
 function json(response: http.ServerResponse, status: number, value: unknown): void {
@@ -145,7 +253,8 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
         const tick = async (): Promise<void> => {
           if (response.writableEnded) return;
           let events: ActivityEvent[] = [];
-          try { events = await runtime.activity.list(20); } catch { /* activity log hiccup; skip this tick's diff */ }
+          // 40 (not 20): also the scan window for scanAuthAlert's 10-minute lookback below.
+          try { events = await runtime.activity.list(40); } catch { /* activity log hiccup; skip this tick's diff */ }
           if (events.length) {
             const chronological = [...events].reverse(); // oldest -> newest
             const startIndex = lastSeenId ? chronological.findIndex((event) => event.id === lastSeenId) + 1 : 0;
@@ -174,6 +283,7 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
                 lastActivityAgeSec,
                 pendingApprovals: pending.length,
               },
+              authAlert: scanAuthAlert(events),
             });
           } catch { /* resource sampling hiccup; skip this tick's resources push */ }
         };
@@ -191,17 +301,22 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
       }
       if (request.method === "GET" && url.pathname === "/api/settings") { json(response, 200, { provider: runtime.config.provider }); return; }
       if (request.method === "GET" && url.pathname === "/api/knowledge") {
-        if (knowledgeStatsCache) { json(response, 200, { stats: knowledgeStatsCache }); return; }
-        if (knowledgeStatsError) { json(response, 200, { stats: null, error: knowledgeStatsError }); return; }
+        startDistillationInit(runtime);
+        const distillation = distillationCache ?? (distillationError ? { error: distillationError } : { loading: true });
+        if (knowledgeStatsCache) { json(response, 200, { stats: knowledgeStatsCache, distillation }); return; }
+        if (knowledgeStatsError) { json(response, 200, { stats: null, error: knowledgeStatsError, distillation }); return; }
         try {
           await fs.access(runtime.config.knowledgeDbPath);
         } catch (error) {
-          json(response, 200, { stats: null, error: error instanceof Error ? error.message : String(error) });
+          json(response, 200, { stats: null, error: error instanceof Error ? error.message : String(error), distillation });
           return;
         }
         startKnowledgeInit(runtime);
-        json(response, 200, { stats: null, loading: true });
+        json(response, 200, { stats: null, loading: true, distillation });
         return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/engram/metrics") {
+        json(response, 200, await engramMetricsSummary(runtime)); return;
       }
       if (request.method === "GET" && url.pathname === "/api/covers") {
         const dir = path.join(runtime.config.dataDir, "cover-letters");
@@ -241,6 +356,56 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
         const input = await body(request); const role = String(input.role || "architect"); const task = String(input.task || "");
         if (!task) { json(response, 400, { error: "task is required" }); return; }
         json(response, 200, await runtime.luna.dispatch(role, task, { allowEdits: input.allowEdits === true })); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/engram/recall") {
+        const input = await body(request);
+        const query = String(input.query || "").trim();
+        if (!query) { json(response, 400, { error: "query is required" }); return; }
+        const store = input.store === "knowledge" ? "knowledge" : "personal";
+        const k = Math.min(50, Math.max(1, Math.trunc(Number(input.k)) || 8));
+        const startedAt = Date.now();
+        // Read-only lab recall: bypass HenryMemory/KnowledgeBase's recall() wrappers (which
+        // mark-used + reinforce on every call) and hit the engine directly with those signals
+        // off, exactly like runtime.memory.recall does for the real path minus the side effects.
+        const engine = store === "knowledge" ? runtime.knowledge.engine : runtime.memory.engine;
+        try {
+          const trace = await engine.recallTrace(query, { k, associative: true, markUsed: false, reinforce: false });
+          json(response, 200, {
+            results: trace.results.map((result) => ({
+              id: result.id,
+              content: result.content.slice(0, 300),
+              source: result.source,
+              tier: result.tier,
+              score: result.score,
+              why: result.why,
+            })),
+            activation: {
+              seeds: trace.trace.seeds.map((seed) => seed.id),
+              activated: trace.trace.activations.map((activation) => activation.id),
+            },
+            latencyMs: Date.now() - startedAt,
+          });
+        } catch (error) {
+          json(response, 200, {
+            results: [],
+            activation: { seeds: [], activated: [] },
+            latencyMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/relogin") {
+        const input = await body(request);
+        const provider = input.provider === "codex" || input.provider === "claude" ? input.provider : null;
+        if (!provider) { json(response, 400, { error: 'provider must be "codex" or "claude"' }); return; }
+        try {
+          await relogin(provider);
+          json(response, 200, { ok: true, provider });
+        } catch (error) {
+          json(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
       }
       const approval = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|execute)$/);
       if (request.method === "POST" && approval) {
