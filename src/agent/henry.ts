@@ -42,10 +42,20 @@ export class HenryAgent {
     }
     let knowledgeBlock = "";
     const domain = detectKnowledgeDomain(prompt);
-    if (domain && this.knowledgeProvider) {
-      try { knowledgeBlock = await this.knowledgeProvider().context(prompt, { domain, budgetChars: 6000 }); } catch (error) {
+    // RAG-first (Dad's rule): don't gate on the regex router alone. Any substantive
+    // turn gets a cheap LLM-free retrieval probe (~80-350ms); the corpus's own
+    // relevance scores decide injection. Chatter (t0) and tiny turns skip the probe.
+    const probeWorthy = domain !== null || (prompt.trim().length > 25 && classifyIntentTier(prompt) !== "t0");
+    if (probeWorthy && this.knowledgeProvider) {
+      try { knowledgeBlock = await this.knowledgeProvider().context(prompt, { domain: domain ?? undefined, budgetChars: 6000 }); } catch (error) {
         await this.activity.record("run.failed", "Knowledge recall failed; continuing without it", { error: String(error) }, { runId });
       }
+    }
+    if (knowledgeBlock) {
+      knowledgeBlock = [
+        "GROUNDING RULE: the block below is GrowthX's tried-and-tested founder knowledge. When it covers Dad's question, ground your answer in it and CITE the module names you drew from. Where it does not cover something, say so explicitly and clearly label that part as general knowledge — never blend the two silently.",
+        knowledgeBlock,
+      ].join("\n");
     }
     const slimHeader = [
       "You are Henry (session resumed — your soul, personality, and operating rules from earlier in this session still apply).",
