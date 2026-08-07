@@ -223,8 +223,12 @@ async function main(): Promise<void> {
       console.log(`\n${out.role} at ${out.company}`);
       for (const change of out.changes) console.log(`  · ${change}`);
       console.log(`\nresume: ${out.resumePdf}\ncover:  ${out.coverPdf}`);
-      const { spawn } = await import("node:child_process");
-      spawn("open", [out.dir], { stdio: "ignore" }).once("error", () => {});
+      // Only pop Finder for a human at a terminal — automated/test invocations
+      // repeatedly reopening the folder read as a runaway loop to Dad.
+      if (process.stdout.isTTY) {
+        const { spawn } = await import("node:child_process");
+        spawn("open", [out.dir], { stdio: "ignore" }).once("error", () => {});
+      }
     } else if (command === "repl") {
       keepAlive = true;
       startDashboardBeside(runtime);

@@ -112,8 +112,13 @@ function inline(text: string): string {
   return esc(text).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 }
 
-/** Fixed template replicating Dad's real resume PDF (Word-blue, Letter). Content-only slots. */
-export function renderResumeHtml(d: ResumeData): string {
+/**
+ * Fixed template replicating Dad's real resume PDF (Word-blue, Letter). Content-only slots.
+ * `fit` is a uniform shrink factor (1 = native metrics) driving the --fit CSS var: font and
+ * vertical rhythm scale together, so a 3-6% shrink is visually invisible but reclaims the
+ * lines needed to honor the ONE-PAGE guarantee.
+ */
+export function renderResumeHtml(d: ResumeData, fit = 1): string {
   const contactHtml = esc(d.contact)
     .replace(/Gulatiluvish@gmail\.com/i, '<a href="mailto:Gulatiluvish@gmail.com">Gulatiluvish@gmail.com</a>')
     .replace(/\bLinkedIn\b/, '<a href="https://www.linkedin.com/in/luvish-gulati-282a84184">LinkedIn</a>')
@@ -132,27 +137,27 @@ export function renderResumeHtml(d: ResumeData): string {
   const skillsHtml = d.skills.map((s) => `<div class="skillrow"><b>${esc(s.label)}:</b> <span class="items">${esc(s.items)}</span></div>`).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Calibri, Carlito, "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 10.4pt; line-height: 1.32; }
+    body { font-family: Calibri, Carlito, "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: calc(9.6pt * var(--fit, 1)); line-height: 1.10; }
     a { color: #0563C1; text-decoration: none; }
-    .name { text-align: center; color: #2E74B5; font-size: 23pt; font-weight: 700; letter-spacing: 0.5px; }
-    .contact { text-align: center; font-size: 9.6pt; color: #333; margin: 3pt 0 8pt; }
+    .name { text-align: center; color: #2E74B5; font-size: 20.5pt; font-weight: 700; letter-spacing: 0.5px; }
+    .contact { text-align: center; font-size: 9.2pt; color: #333; margin: 2pt 0 5pt; }
     .sep { color: #7f7f7f; }
-    h2 { color: #2E74B5; font-size: 10.6pt; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1.4px solid #2E74B5; padding-bottom: 1.5pt; margin: 7pt 0 4pt; }
+    h2 { color: #2E74B5; font-size: calc(9.9pt * var(--fit, 1)); text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1.3px solid #2E74B5; padding-bottom: 1pt; margin: calc(4.5pt * var(--fit, 1)) 0 calc(2.5pt * var(--fit, 1)); }
     .profile { text-align: justify; }
-    .entry { margin-bottom: 4.5pt; }
+    .entry { margin-bottom: calc(2.8pt * var(--fit, 1)); }
     .row { display: flex; align-items: baseline; }
-    .company { font-weight: 700; font-size: 10.8pt; }
+    .company { font-weight: 700; font-size: 10pt; }
     .loc { color: #595959; font-size: 9.8pt; }
     .dates { margin-left: auto; font-style: italic; color: #595959; font-size: 9.8pt; }
-    .role { color: #2E74B5; font-style: italic; font-weight: 600; margin: 1pt 0 2pt; }
-    .ptitle { font-weight: 700; font-size: 10.6pt; margin-bottom: 2pt; }
-    ul { padding-left: 16pt; }
-    li { margin-bottom: 1.2pt; text-align: justify; }
+    .role { color: #2E74B5; font-style: italic; font-weight: 600; margin: 0.5pt 0 1.2pt; }
+    .ptitle { font-weight: 700; font-size: 9.9pt; margin-bottom: 1pt; }
+    ul { padding-left: 13pt; }
+    li { margin-bottom: calc(0.6pt * var(--fit, 1)); text-align: justify; }
     .edu .row { align-items: baseline; }
     .edu .company { font-size: 10.4pt; }
-    .skillrow { margin-bottom: 2pt; }
+    .skillrow { margin-bottom: 1pt; }
     .skillrow .items { color: #404040; }
-  </style></head><body>
+  </style></head><body style="--fit:${fit}">
     <div class="name">${esc(d.name)}</div>
     <div class="contact">${contactHtml}</div>
     <h2>Profile</h2><div class="profile">${inline(d.profile)}</div>
@@ -200,7 +205,12 @@ export class TailoredApplicationService {
       `- projectBullets: exactly ${base.projects.length} arrays with exactly [${base.projects.map((p) => p.bullets.length).join(", ")}] bullets.`,
       "- Every fact, metric, and number MUST come from the base resume verbatim-truthful — never invent, inflate, or estimate. Rewording is fine; new claims are not.",
       "- ONE PAGE: each rewritten bullet must be no LONGER (in characters) than the base bullet it replaces — trim connective filler to buy room for JD keywords. The page must not grow.",
-      "- profile: 2-3 sentences, aligned to the JD's language, still 100% true to the base.",
+      "- profile: 2-3 sentences. FIRST sentence leads with the JD's literal role title + Dad's top 1-2 genuinely-shared qualifiers (the summary carries the heaviest ATS keyword weight); include his single strongest quantified achievement; mirror JD phrasing naturally, never as a stapled keyword list.",
+      "CRAFT RULES (evidence-based, 2025-26 recruiter/ATS research):",
+      "- Bullets open with a strong past-tense action verb — never 'Responsible for'. XYZ shape: accomplished [X], measured by [Y], by doing [Z]; put the NUMBER in the first half of the bullet (recruiters scan top-down, ~7 seconds).",
+      "- Mirror the JD's exact noun phrases for must-have skills verbatim ONCE each (exact match still outranks synonyms in ATS), woven into bullets — never paste JD sentences, never repeat a keyword unnaturally (stuffing is detectable and rejected).",
+      "- Prioritize the JD's 'required'/first-listed terms over nice-to-haves; echo each critical skill both in a bullet AND its skills row.",
+      "- Coffee-chat test: every rewording must survive a former manager's fact-check — reframe, never inflate.",
       `- skills: same ${base.skills.length} rows, same labels, same items — you may only REORDER items within a row (most JD-relevant first).`,
       "- changes: 3-6 short lines describing what you emphasized and why (for Dad's review).",
       "- company/role: extracted from the JD (or \"the company\"/\"the role\" if absent).",
@@ -256,15 +266,54 @@ export class TailoredApplicationService {
     await fs.writeFile(path.join(dir, "changes.md"), [`# Tailoring notes — ${role} at ${company}`, "", ...changes.map((c) => `- ${c}`), ""].join("\n"), "utf8");
 
     const resumePdf = path.join(dir, `Luvish_Gulati_Resume_${slugify(company).replace(/-/g, "_")}.pdf`);
-    const html = renderResumeHtml(tailored);
+    // ONE-PAGE GUARANTEE, enforced not hoped-for: measure at the PDF's REAL content
+    // width (8.5in - 1.1in margins = 7.4in = 710px at CSS 96dpi — a wide viewport
+    // under-counts line wraps) → invisible micro-shrink (≤10%, fonts and rhythm scale
+    // together) → if that can't fit, a provider trim pass shortens bullets → final
+    // assertion counts actual PDF pages.
+    const PAGE_BUDGET_PX = 975; // Letter minus 0.85in margins at CSS 96dpi, small safety margin
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "load" });
-      const overflow = await page.evaluate(() => document.body.scrollHeight > 955);
-      if (overflow) changes.push("⚠ content may exceed one page — review the PDF");
-      await page.pdf({ path: resumePdf, format: "Letter", printBackground: true, margin: { top: "0.5in", bottom: "0.45in", left: "0.6in", right: "0.6in" } });
+      await page.setViewportSize({ width: 720, height: 1056 });
+      const measure = async (data: ResumeData, fitValue: number): Promise<number> => {
+        await page.setContent(renderResumeHtml(data, fitValue), { waitUntil: "load" });
+        return page.evaluate(() => document.body.scrollHeight);
+      };
+      let fit = 1;
+      let height = await measure(tailored, fit);
+      if (height > PAGE_BUDGET_PX) {
+        const ratio = height / PAGE_BUDGET_PX;
+        if (ratio <= 1.12) {
+          fit = Math.max(0.9, 0.995 / ratio);
+          height = await measure(tailored, fit);
+        } else {
+          // Too long for invisible scaling: one provider trim pass, then rescale.
+          const trim = await this.runner.run([
+            "Shorten these resume bullets by ~20% characters each. Keep **bold lead-in** markers, keep every number EXACTLY, cut connective filler only.",
+            'Return ONLY JSON in a ```json fence: { "experienceBullets": string[][], "projectBullets": string[][] } with identical array shapes.',
+            `\n${JSON.stringify({ experienceBullets: tailored.experience.map((e) => e.bullets), projectBullets: tailored.projects.map((p) => p.bullets) })}`,
+          ].join("\n"), { role: "resume-tailor", readOnly: true });
+          try {
+            const trimmed = extractJson(trim.response) as TailorReply;
+            const flat = [...(trimmed.experienceBullets ?? []).flat(), ...(trimmed.projectBullets ?? []).flat()].join("\n");
+            const shapeOk = trimmed.experienceBullets?.length === tailored.experience.length && trimmed.projectBullets?.length === tailored.projects.length;
+            if (shapeOk && numberGuard(baseMd, flat).length === 0) {
+              tailored.experience = tailored.experience.map((e, i) => ({ ...e, bullets: trimmed.experienceBullets![i] }));
+              tailored.projects = tailored.projects.map((p, i) => ({ ...p, bullets: trimmed.projectBullets![i] }));
+            }
+          } catch { /* keep untrimmed; scaling below is the fallback */ }
+          height = await measure(tailored, 1);
+          fit = height > PAGE_BUDGET_PX ? Math.max(0.9, 0.995 / (height / PAGE_BUDGET_PX)) : 1;
+          height = await measure(tailored, fit);
+        }
+      }
+      await page.pdf({ path: resumePdf, format: "Letter", printBackground: true, margin: { top: "0.42in", bottom: "0.38in", left: "0.5in", right: "0.5in" } });
     } finally { await browser.close(); }
+    const pdfBytes = await fs.readFile(resumePdf);
+    const pageCount = pdfBytes.reduce((n, _b, i) => n + (pdfBytes.subarray(i, i + 11).toString() === "/Type /Page" && pdfBytes.subarray(i, i + 12).toString() !== "/Type /Pages" ? 1 : 0), 0);
+    if (pageCount > 1) changes.push(`⚠ STILL ${pageCount} pages after trim+shrink — review and shorten manually`);
+    else changes.push("✓ one page, format locked");
 
     const letter = await this.cover.generate(jd);
     await fs.copyFile(letter.pdfPath, path.join(dir, "Cover_Letter.pdf"));

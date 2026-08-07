@@ -84,7 +84,8 @@ export class CoverLetterService {
     const prompt = [
       "Write a cover letter for Dad based STRICTLY on his resume below. Never invent employers, dates, metrics, education, or skills not present in the resume or recalled memory.",
       "Integrate Dad's thinking and voice from the personality notes and recalled memories: direct, builder-minded, results-first. No generic filler ('I am writing to express...'), no flattery padding.",
-      "Structure: strong specific opening hook tying Dad's proven work to THIS role; 2-3 short paragraphs mapping resume evidence to the JD's top needs; a confident close. 250-380 words.",
+      "STRUCTURE (evidence-based): 250-380 words, 3-4 paragraphs. P1 = role + company + one concrete quantified hook from the resume — assume ONLY the opening reliably gets read. P2-3 = map Dad's strongest proof points to the JD's actual stated needs; name ONE specific company fact (product, stated problem, recent move) from the JD and tie it to a real reason for applying. Close short and confident with a direct ask.",
+      "VOICE RULES: ban stock AI phrases — 'proven track record', 'detail-oriented', 'passionate about', 'I am writing to' — recruiters and detectors key on them. Vary sentence length deliberately; uniform rhythm reads as unedited AI. Include one idiosyncratic detail that could NOT be pasted into a letter for a different company — portability is how genuineness is judged. Match register: concise and direct for product/engineering roles; no 'I've always admired' flattery.",
       "If the JD names the company or role, use them; otherwise write neutrally. Return ONLY the letter as markdown (start with a # heading naming the role).",
       `\n--- Dad's resume (source of truth) ---\n${resume}`,
       `\n--- personality / voice notes ---\n${persona || "n/a"}`,
