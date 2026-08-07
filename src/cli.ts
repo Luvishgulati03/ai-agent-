@@ -272,6 +272,26 @@ async function main(): Promise<void> {
         } else if (sub === "distill") {
           const { KnowledgeIngestor } = await import("./knowledge/ingest.ts");
           print(await new KnowledgeIngestor(runtime.config, runtime.activity, kb, runtime.agent.providerRunner).ingestCards({ limit: Number(option("--limit")) || 3 }));
+        } else if (sub === "add") {
+          const target = args[2];
+          if (!target) throw new Error("Usage: henry knowledge add <path> [--domain gtm|growth-strategy|product-management|software-development|community|sales|careers|general] [--name <batch-name>] [--distill]");
+          const { importKnowledge } = await import("./knowledge/importer.ts");
+          const { KNOWLEDGE_DOMAINS } = await import("./knowledge/store.ts");
+          const domainArg = option("--domain");
+          if (domainArg && !KNOWLEDGE_DOMAINS.includes(domainArg as (typeof KNOWLEDGE_DOMAINS)[number])) {
+            throw new Error(`Unknown domain "${domainArg}". Choose one of: ${KNOWLEDGE_DOMAINS.join(", ")}`);
+          }
+          const distill = args.includes("--distill");
+          const report = await importKnowledge(runtime.config, kb, [target], {
+            domain: domainArg as (typeof KNOWLEDGE_DOMAINS)[number] | undefined,
+            sourceName: option("--name"),
+            distill,
+            runner: distill ? runtime.agent.providerRunner : undefined,
+          });
+          print(report);
+          console.log(distill
+            ? "\n--distill spent provider calls to generate strategy cards."
+            : "\nRaw indexing above used local embeddings only (free). Pass --distill to also generate strategy cards — that spends provider calls.");
         } else if (sub === "search") {
           const query = args.slice(2).filter((item) => !item.startsWith("--") && item !== option("--domain")).join(" ");
           if (!query) throw new Error("Usage: henry knowledge search <query> [--domain gtm]");
@@ -285,7 +305,7 @@ async function main(): Promise<void> {
           console.log(`\nWrote ${path.join(path.dirname(runtime.config.evalPath), "last-run.json")}`);
         } else if (sub === "stats") {
           print(kb.stats());
-        } else throw new Error("Usage: henry knowledge export|index|distill|search|context|eval|stats");
+        } else throw new Error("Usage: henry knowledge export|index|distill|add|search|context|eval|stats");
       } finally { kb.close(); }
     } else if (command === "dispatch") {
       const role = args[1] || "architect";

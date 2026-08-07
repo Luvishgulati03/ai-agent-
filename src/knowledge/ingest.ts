@@ -18,7 +18,8 @@ export function deriveDomain(hints: string[]): KnowledgeDomain {
   return "general";
 }
 
-function chunkText(text: string, size = 1400, overlap = 200): string[] {
+/** Exported for reuse by the generic importer (importer.ts) — same chunking, any source. */
+export function chunkText(text: string, size = 1400, overlap = 200): string[] {
   const clean = text.replace(/\s+\n/g, "\n").trim();
   if (clean.length <= size) return clean ? [clean] : [];
   const chunks: string[] = [];

@@ -94,3 +94,44 @@ knowledge ...` call or the first domain-matched agent turn. To keep it fully
 dormant: never run `henry knowledge` commands, and disable the scheduled
 distillation by setting `"enabled": false` on the `knowledge-distill-nightly`
 entry in `workflows/defaults.json`. No env var is required to turn it off.
+
+## 6. Adding your own knowledge
+
+The accuracy note in §2 still holds for `henry knowledge index` — but you are
+not limited to the GX-export shape. `src/knowledge/importer.ts`
+(`importKnowledge`) is a second, generic ingestion path for arbitrary
+gathered material: articles, notes, PDFs, or whole folders of markdown, e.g.
+"marketing techniques for small startups" clipped from wherever you found it.
+
+```
+henry knowledge add <path> [--domain gtm|growth-strategy|product-management|software-development|community|sales|careers|general] [--name <batch-name>] [--distill]
+```
+
+- `<path>` is a single file or a directory. Directories are walked
+  recursively; hidden entries (dotfiles/dot-directories) and `node_modules`
+  are skipped.
+- Supported files: `.md` and `.txt` are read directly; `.pdf` is extracted
+  via `pdftotext` (poppler) if it's on PATH — install with `brew install
+  poppler` if you see that error. Any other extension is skipped with a
+  reason in the report, not silently dropped.
+- `--domain` pins every chunk (and, by default, every distilled card) to one
+  domain instead of the automatic per-chunk heuristic (`deriveDomain`, the
+  same one `henry knowledge index` uses).
+- `--name <batch-name>` labels the import (defaults to today's date if
+  omitted) — it becomes the provenance folder name and `metadata.batch` on
+  every indexed entry, so keep it meaningful; there is no delete/undo command
+  yet, so a sloppy name just sits there harmlessly.
+- `--distill` additionally spends provider calls (`distillToCards`,
+  `src/knowledge/distill.ts`) to turn each file into strategy cards, on top
+  of the raw indexing that always happens for free (local embeddings only).
+  Omit it for a zero-cost import.
+
+Where things land: originals are copied to
+`knowledge/raw/imported/<batch>/` (provenance; gitignored, same as the rest
+of `knowledge/`); raw chunks are indexed straight into `data/knowledge.db`
+with `metadata.layer = "raw"` and `metadata.imported = true`; cards (only
+with `--distill`) are rendered to
+`knowledge/cards/imported-<batch>-<file>-N.md` and indexed with
+`metadata.layer = "card"`. Both layers recall through the normal `henry
+knowledge search|context` commands alongside GX-native content — imported
+entries are just additional rows, not a separate store.
