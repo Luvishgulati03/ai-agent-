@@ -2327,12 +2327,21 @@
 
       canvas.addEventListener("pointerdown", function (event) {
         state.dragging = true;
+        // Click-vs-drag: "pressed" is not "dragged". The old pointerup test used
+        // state.dragging (true on EVERY press), so each click was misread as a
+        // drag and node selection was dead code — the inspector never updated
+        // from the graph. Selection now fires unless the pointer really moved.
+        state.dragMoved = false;
+        state.downPointer = { x: event.clientX, y: event.clientY };
         state.lastPointer = { x: event.clientX, y: event.clientY };
         canvas.setPointerCapture(event.pointerId);
       });
 
       canvas.addEventListener("pointermove", function (event) {
         if (state.dragging && state.lastPointer) {
+          if (state.downPointer && Math.hypot(event.clientX - state.downPointer.x, event.clientY - state.downPointer.y) > 4) {
+            state.dragMoved = true;
+          }
           state.panX += event.clientX - state.lastPointer.x;
           state.panY += event.clientY - state.lastPointer.y;
           state.lastPointer = { x: event.clientX, y: event.clientY };
@@ -2346,8 +2355,10 @@
       });
 
       canvas.addEventListener("pointerup", function (event) {
-        var wasDragging = state.dragging;
+        var wasDragging = state.dragMoved === true;
         state.dragging = false;
+        state.dragMoved = false;
+        state.downPointer = null;
         state.lastPointer = null;
         if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
         if (!wasDragging) {
