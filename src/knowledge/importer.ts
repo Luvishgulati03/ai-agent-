@@ -77,9 +77,9 @@ function renderCard(card: StrategyCard): string {
 
 /**
  * Generic knowledge importer: feeds arbitrary gathered material (articles, notes,
- * PDFs, folders of markdown) into the knowledge base — beyond the GX-export shapes
+ * PDFs, folders of markdown) into the knowledge base — beyond the adapter-export shapes
  * `KnowledgeIngestor` (ingest.ts) expects. Reuses ingest.ts's chunking and domain
- * derivation so imported entries recall identically to GX-native ones; never touches
+ * derivation so imported entries recall identically to natively-exported ones; never touches
  * ingest.ts's own collectRawEntries/ingestRaw/ingestCards paths (module doctrine #7).
  *
  * Originals are copied into `knowledge/raw/imported/<batch>/` for provenance (that

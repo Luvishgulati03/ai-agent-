@@ -47,7 +47,7 @@ export async function distillToCards(
   const cards: StrategyCard[] = [];
   for (const [index, chunk] of chunks.entries()) {
     const prompt = [
-      "Distill this GrowthX learning-module transcript into strategy cards: atomic, actionable, tried-and-tested knowledge units.",
+      "Distill this learning-module transcript into strategy cards: atomic, actionable, tried-and-tested knowledge units.",
       "Each card is one reusable tactic/principle with concrete steps grounded ONLY in the transcript. Never invent facts or numbers.",
       `Card domain must be one of: ${KNOWLEDGE_DOMAINS.join(", ")}. Domain hint for this module: ${input.domainHint}.`,
       'Return ONLY JSON: {"cards":[{"title":string,"claim":string,"whenToUse":string,"steps":string[],"evidence":string,"domain":string,"tags":string[]}]}',

@@ -1,6 +1,6 @@
 # Module doctrine — the 12 rules
 
-Distilled from the GrowthX personal-AI-agent buildathon handbook and its module sources
+Distilled from the organization's personal-AI-agent buildathon handbook and its module sources
 (memory, email-replies, cronjobs modules + starter). Every new Henry capability is audited
 against this checklist before merge. Sourced 2026-08-06.
 

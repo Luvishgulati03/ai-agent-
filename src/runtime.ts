@@ -87,7 +87,7 @@ export class HenryRuntime {
     this.launch = new LaunchCrewService(config, this.activity, this.memory, () => this.knowledge, this.agent.providerRunner);
   }
 
-  /** Lazily opens the GrowthX knowledge DB on first domain-relevant turn; keeps boot fast. */
+  /** Lazily opens the organization's knowledge DB on first domain-relevant turn; keeps boot fast. */
   get knowledge(): KnowledgeBase {
     if (!this._knowledge) this._knowledge = new KnowledgeBase(this.config);
     return this._knowledge;

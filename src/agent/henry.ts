@@ -53,7 +53,7 @@ export class HenryAgent {
     }
     if (knowledgeBlock) {
       knowledgeBlock = [
-        "GROUNDING RULE: the block below is GrowthX's tried-and-tested founder knowledge. When it covers Dad's question, ground your answer in it and CITE the module names you drew from. Where it does not cover something, say so explicitly and clearly label that part as general knowledge — never blend the two silently.",
+        "GROUNDING RULE: the block below is the organization's tried-and-tested founder knowledge. When it covers Dad's question, ground your answer in it and CITE the module names you drew from. Where it does not cover something, say so explicitly and clearly label that part as general knowledge — never blend the two silently.",
         knowledgeBlock,
       ].join("\n");
     }

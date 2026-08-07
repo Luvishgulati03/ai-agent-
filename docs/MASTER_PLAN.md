@@ -1,7 +1,7 @@
 # Henry — Master Architecture & Roadmap Plan
 
 Date: 2026-08-06 · Author: Fable (chief architect) with 6 research agents
-Status: **PLAN ONLY — approved build has not started.** Sources: gx-client-expo exploration, Friday-clone exploration, Junior exploration, HippoRAG deep-dive, agent-memory state-of-the-art survey, capability-landscape survey, E2E-tooling survey. Full reports live in the session transcripts; key conclusions are inlined here.
+Status: **PLAN ONLY — approved build has not started.** Sources: the reference mobile repo exploration, Friday-clone exploration, Junior exploration, HippoRAG deep-dive, agent-memory state-of-the-art survey, capability-landscape survey, E2E-tooling survey. Full reports live in the session transcripts; key conclusions are inlined here.
 
 ---
 
@@ -85,8 +85,8 @@ Rollout order = impact/effort ranking: embeddings → extraction+debounce → ar
 ### 5.2 Web-dev playbook (from Junior)
 Ideation → 1–2h iterations, Iteration-0 core proof → plan-before-code with convention check → build in ≤50-line verified chunks, checkpoint=commit → verification: typecheck + tests + **two clean passes** + integration audit (wiring gaps survive typecheck) → six-pass review (already built) with re-review protocol, closed verdicts, rounds capped at 2 → ship: **never auto-merge to main** (human-gated; matches the approval philosophy) → post-ship workflows: daily worklog, weekly release notes, worktree prune.
 
-### 5.3 Mobile-dev playbook (from gx-client-expo)
-Score-based TDD (5-signal scorecard, ≥2 ⇒ Red-Green-Refactor, else state the skip reason) → design-before-code for non-trivial UI (HTML mockup in phone frame → variants → implement) → hook-style gates: format/lint on edit, typecheck+tests at stop, protected files (`.env`, `eas.json`, `app.config.ts`) blocked → structural contracts (design tokens, no raw px/hex, thin routes, `@/` imports) → docs are part of done → gated release lane (blocking lint+unit+E2E; explicit human go-ahead before store submit; OTA is a separate lane). Henry carries this playbook into any Expo repo via cwd-as-config; gx-client-expo already ships the rules/skills that workers will auto-load.
+### 5.3 Mobile-dev playbook (from the reference mobile repo)
+Score-based TDD (5-signal scorecard, ≥2 ⇒ Red-Green-Refactor, else state the skip reason) → design-before-code for non-trivial UI (HTML mockup in phone frame → variants → implement) → hook-style gates: format/lint on edit, typecheck+tests at stop, protected files (`.env`, `eas.json`, `app.config.ts`) blocked → structural contracts (design tokens, no raw px/hex, thin routes, `@/` imports) → docs are part of done → gated release lane (blocking lint+unit+E2E; explicit human go-ahead before store submit; OTA is a separate lane). Henry carries this playbook into any Expo repo via cwd-as-config; the reference mobile repo already ships the rules/skills that workers will auto-load.
 
 ### 5.4 E2E — web (research verdict)
 **Playwright Test as the persistent layer** (committed `.spec.ts`, zero LLM at runtime) + **Playwright Agents** (v1.56+ Planner/Generator/Healer) for authoring and self-healing + **`@playwright/cli`** for exploration (a11y snapshots to files: ~4× fewer tokens than MCP). Accessibility-tree-first, vision on demand. Role locators + `toMatchAriaSnapshot`. Headless shell, `workers:1`, trace on-first-retry. Skip browser-use/Stagehand for testing.
@@ -117,9 +117,9 @@ Henry attends Dad's meetings and produces (a) general meeting notes and (b) a pe
 4. **Output**: markdown → `pandoc` → `.docx` (or plain `.txt`) saved to a meetings folder; facts + commitments captured to Engram (T0 memory-agent); surfaces on dashboard.
 Decomposition per doctrine: capture+transcribe = deterministic, summary = one T1 call, memory = T0. Cost per meeting ≈ one standard model call. Build in Phase 6.
 
-### 6.2 GrowthX knowledge base — the RAG module (digital-twin foundation)
+### 6.2 The organization's knowledge base — the RAG module (digital-twin foundation)
 
-Goal: Dad's agent reasons with GrowthX's tried-and-tested founder knowledge (learning-module transcripts: GTM strategies, PM content, engineering content) and future sources. Design principle: **knowledge ≠ memory** — they are separate stores with different lifecycles.
+Goal: Dad's agent reasons with the organization's tried-and-tested founder knowledge (learning-module transcripts: GTM strategies, PM content, engineering content) and future sources. Design principle: **knowledge ≠ memory** — they are separate stores with different lifecycles.
 
 | | Personal memory (Engram, existing) | Knowledge base (new `knowledge` module) |
 |---|---|---|
@@ -128,15 +128,15 @@ Goal: Dad's agent reasons with GrowthX's tried-and-tested founder knowledge (lea
 | Injection | Every turn (profile + recall) | **On demand** — when the task's domain matches or a workflow requires it |
 
 **Architecture** (module per §3.1, all `claude -p`/Codex CLI — no API credits):
-1. **Source adapters**: first adapter = read-only Mongo export script run locally against the GrowthX DB (Dad's existing credentials; creds never stored in Henry). Later adapters (Notion, Slack, docs) reuse the same pipeline. Raw transcripts land in `knowledge/raw/<module>/`.
+1. **Source adapters**: first adapter = read-only Mongo export script run locally against the organization's DB (Dad's existing credentials; creds never stored in Henry). Later adapters (Notion, Slack, docs) reuse the same pipeline. Raw transcripts land in `knowledge/raw/<module>/`.
 2. **Distillation** (T1, one pass per module): each transcript → (a) a summary doc, and (b) **strategy cards** — atomic, actionable knowledge units: `{claim, when-to-use, steps, evidence/example, source module, author}` as individual markdown files in `knowledge/cards/`. Cards, not raw chunks, are the primary recall unit (higher precision, provenance built in).
 3. **Index**: a second Engram instance at `data/knowledge.db` (reuses hybrid retrieval, graph, entity seeding, the Phase-1 local embeddings — zero new deps). Metadata: `{domain: gtm|pm|eng, module, author, sourcePath}`.
-4. **Retrieval**: cards first, raw chunks as depth fallback; entity-seeded hybrid recall; ~2k-token budget; injected as a clearly labeled block — *"GrowthX knowledge (tried & tested)"* — so the model treats it as authoritative practice, distinct from general knowledge. A T0 domain classifier (or explicit workflow declaration) decides when to attach it; it is never injected on unrelated turns.
-5. **Governance — hard rule**: `knowledge/` and `data/knowledge.db` are proprietary GrowthX content → **local-only, gitignored, never in the public repo**. The open-source repo ships the empty knowledge module + adapter framework, not the data.
+4. **Retrieval**: cards first, raw chunks as depth fallback; entity-seeded hybrid recall; ~2k-token budget; injected as a clearly labeled block — *"Curated knowledge (tried & tested)"* — so the model treats it as authoritative practice, distinct from general knowledge. A T0 domain classifier (or explicit workflow declaration) decides when to attach it; it is never injected on unrelated turns.
+5. **Governance — hard rule**: `knowledge/` and `data/knowledge.db` are the organization's proprietary content → **local-only, gitignored, never in the public repo**. The open-source repo ships the empty knowledge module + adapter framework, not the data.
 
-### 6.2b LX-RAG reference findings (studied 2026-08-06, adopted)
+### 6.2b Production-RAG reference findings (studied 2026-08-06, adopted)
 
-GX's own LX-RAG (gx-backend `learning_chunks`) validated these choices, now applied to Henry's knowledge module: (1) **reuse their LLM-chunked corpus** — `learningchunks` docs (chapter-titled, role/difficulty/concept-tagged, stereo-deduped) are the primary export, so Henry inherits their $-expensive semantic chunking free; (2) **context-prefixed embeddings** — embed `module | chapter | topic` prefix + text, display raw text (our ingest prepends module/product already); (3) **score threshold + metadata pre-filters beat pure top-K** (their 0.70 minScore killed all false positives at 93-96% precision; ours exposed as `minScore`, tune empirically for bge-small); (4) **max 2 chunks per module** for context diversity (implemented); (5) **versioned writes with atomic active-flag swap** for re-ingestion without blackout (planned with the arbitration work); (6) build a **~30-query personal eval set** before any reranking investment (their 32-query manual benchmark found content gaps, not retrieval gaps, once corpus was broad). Their next-lever list (minScore bump → per-module cap → role boosting → LLM rerank → query expansion → hybrid RRF) is our tuning roadmap — Engram already ships hybrid RRF and `rerank`.
+The reference production RAG (the reference backend repo's `learning_chunks`) validated these choices, now applied to Henry's knowledge module: (1) **reuse their LLM-chunked corpus** — `learningchunks` docs (chapter-titled, role/difficulty/concept-tagged, stereo-deduped) are the primary export, so Henry inherits their $-expensive semantic chunking free; (2) **context-prefixed embeddings** — embed `module | chapter | topic` prefix + text, display raw text (our ingest prepends module/product already); (3) **score threshold + metadata pre-filters beat pure top-K** (their 0.70 minScore killed all false positives at 93-96% precision; ours exposed as `minScore`, tune empirically for bge-small); (4) **max 2 chunks per module** for context diversity (implemented); (5) **versioned writes with atomic active-flag swap** for re-ingestion without blackout (planned with the arbitration work); (6) build a **~30-query personal eval set** before any reranking investment (their 32-query manual benchmark found content gaps, not retrieval gaps, once corpus was broad). Their next-lever list (minScore bump → per-module cap → role boosting → LLM rerank → query expansion → hybrid RRF) is our tuning roadmap — Engram already ships hybrid RRF and `rerank`.
 
 ### 6.3 Launch crew — the digital-twin workflow
 
@@ -194,7 +194,7 @@ Implementation: `/api/events` SSE endpoint + dashboard-state module (Friday patt
 | 2 | Memory v2: nightly sleep-time consolidation, profile.md, entity seeding, selective rerank, recall traces | workers |
 | 3 | Workflow engine (Junior format) + web/mobile playbooks + E2E stacks (Playwright Agents, Maestro) + Friday spine (worktrees, cwd-dispatch, ask-owner) + resource manager | architect + workers |
 | 4 | Futuristic dashboard (SSE realtime, heartbeat, resources, memory observatory) | workers, spec from §8 |
-| 5 | **GrowthX knowledge module + launch crew** (§6.2–6.3) — Dad's priority; needs Phase 1 embeddings + Phase 3 dispatch | architect + workers |
+| 5 | **The organization's knowledge module + launch crew** (§6.2–6.3) — Dad's priority; needs Phase 1 embeddings + Phase 3 dispatch | architect + workers |
 | 6 | X messaging + style pipeline + image generation + screenshots + meeting shadow | workers |
 | 7 | Career booster: interview prep, mock loop, spaced practice; job-search expansion | workers |
 | 8 | **Friday/Junior capability parity** (Dad's directive 2026-08-06): everything those two agents can do, Henry can do — Friday: buffered sessions, per-thread worktrees+tmux dispatch, ask-owner, runbooks, voice daemon, vision-grounded UI control, dashboards/SSE, standup, brain-dumps, anti-spiral; Junior: workflow engine, bug pipeline (thinker/reproducer/lead), dev-server queue, action buttons, persistent agents, worklog/release-notes/worktree-prune workflows. Most are already planned in Phases 3-4; this phase closes the remainder (voice, standup/dumps, bug pipeline state machine, dev-server manager) | architect + workers |
@@ -235,7 +235,7 @@ Effort maps to provider flags (Codex `model_reasoning_effort`, Claude thinking b
 
 The dispatch doctrine is engine-agnostic and must be first-class on Codex, not a Claude port:
 - **Tier mapping**: T0/T1/T2 become named Codex profiles in `~/.codex/config.toml` (model + `model_reasoning_effort` combos, e.g. `t0` = mini model + low effort, `t2` = frontier + high). ProviderRunner selects `--profile` per dispatch, exactly as it selects Claude effort/model flags. Effort knob = `model_reasoning_effort` (Codex) ↔ thinking budget (Claude).
-- **Agent definitions**: `.claude/` stays canonical; a thin `.agent/` mirror (gx-client-expo pattern) gives Codex the same roles/rules with a tool-translation table (Read/Grep→rg, Edit→apply_patch). Any `.claude/` change updates its mirror.
+- **Agent definitions**: `.claude/` stays canonical; a thin `.agent/` mirror (the reference mobile repo's pattern) gives Codex the same roles/rules with a tool-translation table (Read/Grep→rg, Edit→apply_patch). Any `.claude/` change updates its mirror.
 - **No hooks on Codex**: deterministic gates (format, typecheck, tests, protected files) that Claude gets via hooks are expressed as a mandatory post-edit checklist in the Codex agent prompt + verified by the orchestrator after the worker returns.
 - **Events**: Codex `exec --json` JSONL is already mapped to the shared event shape in ProviderRunner (Friday's `mapCodexEvent` pattern) — dashboards/envelopes/watchdogs work identically for both engines.
 - **Web**: `--search` flag for Codex research dispatches ↔ Claude WebSearch.

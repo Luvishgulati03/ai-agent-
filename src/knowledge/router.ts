@@ -2,7 +2,7 @@ import type { KnowledgeDomain } from "./store.ts";
 
 /**
  * Zero-LLM heuristic router: decides whether a turn is domain-relevant enough
- * to justify pulling the GrowthX knowledge base into the prompt at all.
+ * to justify pulling the organization's knowledge base into the prompt at all.
  * Adapted from ingest.ts's deriveDomain, but deliberately stricter: deriveDomain
  * always resolves to a bucket (defaulting to "general") because every ingested
  * chunk needs *some* domain tag. Here a miss must stay a miss — ordinary chit-chat

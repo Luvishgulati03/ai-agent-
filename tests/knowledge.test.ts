@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { loadConfig } from "../src/config.ts";
-import { richTextToPlain } from "../src/knowledge/adapters/gx-mongo.ts";
+import { richTextToPlain } from "../src/knowledge/adapters/org-mongo.ts";
 import { deriveDomain } from "../src/knowledge/ingest.ts";
 import { KnowledgeBase } from "../src/knowledge/store.ts";
 

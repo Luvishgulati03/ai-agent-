@@ -3,7 +3,7 @@
 **You are Claude Code, Codex, or another coding agent, reading this inside
 Henry's repo.** Already implemented at `src/knowledge/store.ts`,
 `src/knowledge/ingest.ts`, `src/knowledge/router.ts`, and
-`src/knowledge/adapters/gx-mongo.ts` — don't rebuild it. Configure and verify
+`src/knowledge/adapters/org-mongo.ts` — don't rebuild it. Configure and verify
 only.
 
 ## 1. What it does
@@ -18,7 +18,7 @@ personal memory.
 Commands it adds (`src/cli.ts`, `knowledge` branch):
 
 ```
-henry knowledge export                    # GrowthX-specific: pulls raw corpus from a gx-backend Mongo instance
+henry knowledge export                    # organization-specific: pulls raw corpus from a reference backend Mongo instance
 henry knowledge index [--limit N]         # indexes knowledge/raw/{chunks.jsonl,transcripts/,texts/} with LOCAL embeddings, zero LLM calls
 henry knowledge distill [--limit N]       # LLM pass: raw chunks -> strategy cards (provider call per module, budgeted)
 henry knowledge search <query> [--domain gtm]
@@ -46,10 +46,10 @@ arbitrary markdown. `KnowledgeIngestor.collectRawEntries()` reads exactly:
 - `knowledge/raw/transcripts/*.md` and `knowledge/raw/texts/*.md` — markdown
   with a `key: value` frontmatter block (a `module:` field at minimum).
 
-`henry knowledge export` is a GrowthX-internal adapter: it reads Mongo
-credentials from `GX_BACKEND_DIR/apps/migrations/.env` (`GX_BACKEND_DIR`
-defaults to a hardcoded path on the author's machine — override it via env if
-you have your own gx-backend checkout) and writes the corpus above into
+`henry knowledge export` is an internal adapter for the organization's own
+Mongo instance: it reads credentials from `ORG_BACKEND_DIR/apps/migrations/.env`
+(required — point it at your own reference backend checkout) and writes the
+corpus above into
 `knowledge/raw/`. Forks without access to that Mongo instance should populate
 `knowledge/raw/` by hand in the same shape instead of running `export`.
 
@@ -65,7 +65,7 @@ you have your own gx-backend checkout) and writes the corpus above into
   (`src/agent/henry.ts`) calls `detectKnowledgeDomain(prompt)`
   (`src/knowledge/router.ts`); if a domain is detected, it pulls up to 6000
   chars of context from the knowledge base and appends it to the prompt
-  labeled `--- GrowthX knowledge (tried & tested founder playbooks) ---` — no
+  labeled `--- Curated knowledge (tried & tested playbooks) ---` — no
   CLI command needed for this path, it's automatic per turn.
 - **Scheduler**: `workflows/defaults.json` ships
   `knowledge-distill-nightly` (`kind: "knowledge.distill"`, `batchLimit: 25`,
@@ -98,7 +98,7 @@ entry in `workflows/defaults.json`. No env var is required to turn it off.
 ## 6. Adding your own knowledge
 
 The accuracy note in §2 still holds for `henry knowledge index` — but you are
-not limited to the GX-export shape. `src/knowledge/importer.ts`
+not limited to the adapter's export shape. `src/knowledge/importer.ts`
 (`importKnowledge`) is a second, generic ingestion path for arbitrary
 gathered material: articles, notes, PDFs, or whole folders of markdown, e.g.
 "marketing techniques for small startups" clipped from wherever you found it.
@@ -133,5 +133,5 @@ with `metadata.layer = "raw"` and `metadata.imported = true`; cards (only
 with `--distill`) are rendered to
 `knowledge/cards/imported-<batch>-<file>-N.md` and indexed with
 `metadata.layer = "card"`. Both layers recall through the normal `henry
-knowledge search|context` commands alongside GX-native content — imported
+knowledge search|context` commands alongside the adapter's native content — imported
 entries are just additional rows, not a separate store.

@@ -33,7 +33,7 @@ Two surfaces, one philosophy: **main dashboard = mission control** (what is Henr
   (nodes with no edges / all), duplicate rate (same-hash content), archive/promotion per dream.
 - **Eval harness**: `data/eval/queries.json` (~15 seed queries with expected-module labels, grown over
   time) + `henry knowledge eval` → precision@5, MRR, per-query table. This gates any rerank/query-expansion
-  investment (LX-RAG's eval-first method).
+  investment (the reference production RAG's eval-first method).
 - GET `/api/engram/metrics` aggregates the event log + live stats for panel B2.
 
 ## Constraints (unchanged doctrine)

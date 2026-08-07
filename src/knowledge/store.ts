@@ -20,7 +20,7 @@ export interface KnowledgeEntry {
 }
 
 /**
- * The curated domain-knowledge index (GrowthX Learn + future sources).
+ * The curated domain-knowledge index (the organization's learning platform + future sources).
  * Separate from personal memory by design: versioned, source-attributed,
  * no decay/supersede lifecycle, injected on demand rather than every turn.
  * Proprietary content — knowledge/ and data/knowledge.db never leave this machine.
@@ -42,7 +42,7 @@ export class KnowledgeBase {
 
   /**
    * Cards outrank raw chunks; a domain filter narrows recall when the task declares one.
-   * LX-RAG-proven rules: score threshold beats pure top-K (kills false positives),
+   * Production-RAG-proven rules: score threshold beats pure top-K (kills false positives),
    * and capping results per module keeps the context diverse.
    */
   async recall(query: string, options: { k?: number; domain?: string; layer?: "card" | "raw"; minScore?: number; markUsed?: boolean; reinforce?: boolean } = {}): Promise<RecallResult[]> {
@@ -59,7 +59,7 @@ export class KnowledgeBase {
         recordRecallEvent(this.config, { ...base, results: 0, topScore: null, latencyMs: Date.now() - startedAt, engineError: error instanceof Error ? error.message : String(error) });
         throw error;
       });
-    // LX-RAG lesson: a declared domain BOOSTS ranking but never hard-filters —
+    // Production-RAG lesson: a declared domain BOOSTS ranking but never hard-filters —
     // hard domain filters create blind spots (community content answering a GTM query).
     const boosted = options.domain
       ? results.map((result) => {
@@ -96,7 +96,7 @@ export class KnowledgeBase {
     const results = await this.recall(query, options);
     if (!results.length) return "";
     const budget = options.budgetChars ?? 8000;
-    const lines: string[] = ["--- GrowthX knowledge (tried & tested founder playbooks) ---"];
+    const lines: string[] = ["--- Curated knowledge (tried & tested playbooks) ---"];
     let used = 0;
     for (const result of results) {
       const meta = (result.metadata || {}) as Record<string, unknown>;

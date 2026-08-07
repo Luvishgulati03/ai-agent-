@@ -5,7 +5,7 @@ import type { ActivityLog } from "../activity.ts";
 import type { ProviderRunner } from "../providers/runner.ts";
 import { KnowledgeBase, type KnowledgeDomain, type KnowledgeEntry } from "./store.ts";
 
-/** Maps GrowthX free-form filter strings / module names onto Henry's domain taxonomy. */
+/** Maps free-form filter strings / module names onto Henry's domain taxonomy. */
 export function deriveDomain(hints: string[]): KnowledgeDomain {
   const text = hints.join(" ").toLowerCase();
   if (/\bgtm|go[ -]?to[ -]?market|launch|distribution\b/.test(text)) return "gtm";
@@ -104,7 +104,7 @@ export class KnowledgeIngestor {
       const title = String(chunk.chapter_title || chunk.title || "");
       entries.push({
         content: title ? `${title}\n${text}` : text,
-        source: `gx-learn/chunks/${String(chunk._id)}`,
+        source: `org-learn/chunks/${String(chunk._id)}`,
         metadata: { layer: "raw", domain: deriveDomain([module, title, ...concepts]), module, concepts, difficulty: chunk.difficulty, contentRole: chunk.content_role, moduleId },
       });
     }
@@ -119,7 +119,7 @@ export class KnowledgeIngestor {
         for (const [index, piece] of chunkText(body).entries()) {
           entries.push({
             content: `${module} (part ${index + 1})\n${piece}`,
-            source: `gx-learn/${sub}/${file}#${index + 1}`,
+            source: `org-learn/${sub}/${file}#${index + 1}`,
             metadata: { layer: "raw", domain, module, moduleId: fields.moduleId, filters },
           });
         }
@@ -183,7 +183,7 @@ export class KnowledgeIngestor {
       const domain = String(moduleEntries[0].metadata.domain);
       const corpus = moduleEntries.map((entry) => entry.content).join("\n\n").slice(0, 60_000);
       const prompt = [
-        "Distill this GrowthX learning-module transcript into 3-8 atomic strategy cards.",
+        "Distill this learning-module transcript into 3-8 atomic strategy cards.",
         "Each card = one tried-and-tested tactic/principle actually taught in the content. Never invent; quote-derived evidence only.",
         'Return ONLY a JSON array: [{"claim":string,"whenToUse":string,"steps":string[],"evidence":string}]',
         `\n--- module: ${module} ---\n${corpus}`,
@@ -205,7 +205,7 @@ export class KnowledgeIngestor {
           // Engram/SQLite from one process tolerates interleaved awaits across workers.
           await this.kb.add({
             content: `${card.claim}\nWhen to use: ${card.whenToUse}\nSteps: ${card.steps.join("; ")}\nEvidence: ${card.evidence}`,
-            source: `gx-learn/cards/${path.basename(cardFile)}`,
+            source: `org-learn/cards/${path.basename(cardFile)}`,
             importance: 8,
             metadata: { layer: "card", domain, module, moduleId: key },
           });

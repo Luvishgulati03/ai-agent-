@@ -3,12 +3,12 @@ import path from "node:path";
 import dotenv from "dotenv";
 
 /**
- * Read-only export of the GrowthX Learn corpus from Mongo into knowledge/raw/.
- * Credentials are read from gx-backend's own .env at run time and never stored.
+ * Read-only export of the organization's Learn corpus from Mongo into knowledge/raw/.
+ * Credentials are read from the reference backend repo's own .env at run time and never stored.
  * Member notes (private user data) are deliberately NOT exported.
  */
 
-const GX_BACKEND = process.env.GX_BACKEND_DIR || "/Users/luvishgulati/Growth x repos BE FE and admin/gx-backend";
+const ORG_BACKEND = process.env.ORG_BACKEND_DIR || process.env.GX_BACKEND_DIR;
 
 interface ExportCounts { chunks: number; transcripts: number; texts: number; modules: number }
 
@@ -49,10 +49,11 @@ function frontmatter(fields: Record<string, unknown>): string {
   return `---\n${Object.entries(fields).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")}\n---\n\n`;
 }
 
-export async function exportGxKnowledge(rawDir: string): Promise<ExportCounts> {
-  const env = dotenv.parse(await fs.readFile(path.join(GX_BACKEND, "apps/migrations/.env"), "utf8"));
+export async function exportOrgKnowledge(rawDir: string): Promise<ExportCounts> {
+  if (!ORG_BACKEND) throw new Error("ORG_BACKEND_DIR not set — point it at your reference backend checkout (its apps/migrations/.env must hold DB_STRING)");
+  const env = dotenv.parse(await fs.readFile(path.join(ORG_BACKEND, "apps/migrations/.env"), "utf8"));
   const uri = env.DB_STRING;
-  if (!uri) throw new Error("DB_STRING not found in gx-backend apps/migrations/.env");
+  if (!uri) throw new Error("DB_STRING not found in the backend repo's apps/migrations/.env");
   const { MongoClient } = await import("mongodb");
   const client = new MongoClient(uri, { readPreference: "secondaryPreferred" });
   const counts: ExportCounts = { chunks: 0, transcripts: 0, texts: 0, modules: 0 };

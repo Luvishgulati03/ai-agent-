@@ -1,6 +1,6 @@
 # Henry (Luvish Junior)
 
-Henry is a terminal-first personal engineering agent. Luna orchestrates the build and Henry orchestrates future specialist work. It uses Codex first, Claude as a fallback, and the actual [Engram memory module](https://github.com/anmolm-growthx/engram-memory) as its canonical memory engine.
+Henry is a terminal-first personal engineering agent. Luna orchestrates the build and Henry orchestrates future specialist work. It uses Codex first, Claude as a fallback, and the actual Engram memory module as its canonical memory engine.
 
 ## What is implemented
 
@@ -16,7 +16,7 @@ Henry is a terminal-first personal engineering agent. Luna orchestrates the buil
 - Provider toggle between Codex and Claude (CLI and dashboard).
 - Job application pipeline with tailored resume PDFs and approval-gated submission.
 - Cover letter generation from job descriptions with resume grounding.
-- GrowthX knowledge base (RAG module): curated domain content, local-only indexing, on-demand injection with source attribution.
+- The organization's knowledge base (RAG module): curated domain content, local-only indexing, on-demand injection with source attribution.
 
 ## Quick start
 

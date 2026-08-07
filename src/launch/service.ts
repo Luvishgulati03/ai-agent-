@@ -27,7 +27,7 @@ function fromResult(result: RunResult): CrewFinding {
  * LaunchCrewService — MASTER_PLAN.md §6.3, the digital-twin launch workflow.
  * Two Dad-in-the-loop phases:
  *   intake(slugFromInput) — ONE t1 dispatch reads the product and derives the question
- *     list from what the recalled GrowthX playbooks actually require.
+ *     list from what the recalled playbooks actually require.
  *   run(slug) — after Dad fills in ANSWER: blanks, fans out gtm-strategist (t2),
  *     product-auditor (t1, skipped gracefully when brief-only) and competition-researcher
  *     (t1) in parallel through the shared admission-controlled runner, then one t2
@@ -62,7 +62,7 @@ export class LaunchCrewService {
     const prompt = [
       "You are Henry's launch-intake specialist (MASTER_PLAN.md section 6.3, phase 1 of the launch crew).",
       "Derive the exact list of datapoints Dad must answer before a GTM strategist can build a launch roadmap.",
-      "Base the question list on what the recalled GrowthX playbooks below actually require (things like ICP, pricing, channels, timeline, community size) -- do not pad with generic questions the playbooks don't call for, and never invent facts about the product.",
+      "Base the question list on what the recalled playbooks below actually require (things like ICP, pricing, channels, timeline, community size) -- do not pad with generic questions the playbooks don't call for, and never invent facts about the product.",
       "If the product itself is unclear from what you can inspect, that uncertainty becomes a question too.",
       "Return ONLY JSON, no markdown fences, no prose, matching exactly:",
       '{"productSummary": string, "questions": [{"text": string, "citation": string|null}]}',
@@ -72,7 +72,7 @@ export class LaunchCrewService {
       "--- product ---",
       productBlock,
       "",
-      "--- recalled GrowthX playbooks (tried & tested; may be empty) ---",
+      "--- recalled playbooks (tried & tested; may be empty) ---",
       knowledgeContext || "No relevant playbooks recalled.",
     ].join("\n");
 
@@ -131,11 +131,11 @@ export class LaunchCrewService {
         .catch(() => "");
       const prompt = [
         "You are Henry's gtm-strategist (MASTER_PLAN.md section 6.3, phase 2 of the launch crew).",
-        "Produce a launch roadmap and GTM strategy grounded in the recalled GrowthX playbooks below. Explicitly cite which playbook module informed each major recommendation.",
+        "Produce a launch roadmap and GTM strategy grounded in the recalled playbooks below. Explicitly cite which playbook module informed each major recommendation.",
         "Never invent facts about the product beyond what's given.",
         "", "--- product ---", record.productSummary,
         "", "--- Dad's answers ---", qaBlock,
-        "", "--- recalled GrowthX playbooks ---", knowledgeContext || "No relevant playbooks recalled.",
+        "", "--- recalled playbooks ---", knowledgeContext || "No relevant playbooks recalled.",
       ].join("\n");
       const result = await this.runner.run(prompt, { role: "gtm-strategist", tier: "t2", readOnly: true, cwd: this.config.rootDir });
       await this.recordDispatch(result, "gtm-strategist");

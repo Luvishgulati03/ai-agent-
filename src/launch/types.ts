@@ -3,7 +3,7 @@ export type LaunchPhase = "intake-pending-answers" | "ready" | "complete";
 
 export interface LaunchQuestion {
   text: string;
-  /** Which recalled GrowthX playbook motivated the question ("[domain - module]"), or null. */
+  /** Which recalled playbook motivated the question ("[domain - module]"), or null. */
   citation: string | null;
 }
 

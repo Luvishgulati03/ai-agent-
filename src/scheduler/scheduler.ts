@@ -85,7 +85,7 @@ export class WorkflowScheduler {
   }
 
   /**
-   * Distills GrowthX Learn modules into strategy cards. The KnowledgeBase (and its
+   * Distills the organization's learning-platform modules into strategy cards. The KnowledgeBase (and its
    * resident embedding model) is constructed fresh for this one run and closed
    * before returning — the scheduler daemon may run for days between nightly
    * firings, so nothing about knowledge distillation should stay resident in

@@ -264,8 +264,8 @@ async function main(): Promise<void> {
       try {
         const sub = args[1] || "stats";
         if (sub === "export") {
-          const { exportGxKnowledge } = await import("./knowledge/adapters/gx-mongo.ts");
-          print(await exportGxKnowledge(path.join(runtime.config.knowledgeDir, "raw")));
+          const { exportOrgKnowledge } = await import("./knowledge/adapters/org-mongo.ts");
+          print(await exportOrgKnowledge(path.join(runtime.config.knowledgeDir, "raw")));
         } else if (sub === "index") {
           const { KnowledgeIngestor } = await import("./knowledge/ingest.ts");
           print(await new KnowledgeIngestor(runtime.config, runtime.activity, kb, runtime.agent.providerRunner).ingestRaw({ limit: Number(option("--limit")) || undefined }));

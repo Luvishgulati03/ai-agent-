@@ -83,7 +83,7 @@ export function renderIntakeMarkdown(record: LaunchIntakeRecord): string {
   const source = record.sourceKind === "repo" ? `repository at ${record.sourcePath}` : "product brief (no repository path given)";
   const citationsBlock = record.citations.length
     ? record.citations.map((c) => `- ${c}`).join("\n")
-    : "- No GrowthX playbooks matched yet (questions below use general product-launch judgment).";
+    : "- No playbooks matched yet (questions below use general product-launch judgment).";
   const questionsBlock = record.questions.map((q, i) => {
     const cite = q.citation ? ` (cites: ${q.citation})` : "";
     return `${i + 1}. ${q.text}${cite}\n   ANSWER:`;
