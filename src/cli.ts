@@ -449,7 +449,24 @@ async function main(): Promise<void> {
       const result = await runtime.linkedin.draft(topic);
       console.log(result.draft);
       console.log(`\nDraft saved — review and post manually: ${result.markdownPath}`);
-    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, telegram, mailwatch, linkedin");
+    } else if (command === "launch") {
+      const sub = args[1];
+      if (sub === "intake") {
+        const input = args.slice(2).filter((item) => !item.startsWith("--")).join(" ");
+        if (!input) throw new Error('Usage: henry launch intake "<product brief or repo path>"');
+        const result = await runtime.launch.intake(input);
+        console.log(result.markdown);
+        console.log(`\nSaved: ${result.filePath}`);
+        console.log(`Dad: fill in each ANSWER: line above, save the file, then run: henry launch run ${result.slug}`);
+      } else if (sub === "run") {
+        if (!args[2]) throw new Error("Usage: henry launch run <slug>");
+        const result = await runtime.launch.run(args[2]);
+        console.log(result.dossier);
+        console.log(`\nSaved: ${result.filePath}`);
+      } else if (sub === "list") {
+        print(await runtime.launch.list());
+      } else throw new Error('Usage: henry launch intake "<brief|path>" | run <slug> | list');
+    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, telegram, mailwatch, linkedin, launch");
   } finally {
     if (!keepAlive) runtime.close();
   }

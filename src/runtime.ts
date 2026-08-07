@@ -20,6 +20,7 @@ import { WorkflowEngine } from "./workflows/engine.ts";
 import { GoalService } from "./goals/service.ts";
 import { ReminderService, notifyReminder, type ReminderNotifier } from "./reminders/service.ts";
 import { LinkedInDraftService } from "./social/linkedin.ts";
+import { LaunchCrewService } from "./launch/service.ts";
 import { sendTelegram } from "./notify/telegram.ts";
 import { MailWatchService } from "./mailwatch/service.ts";
 import { DraftRepliesService } from "./gmail-drafts/service.ts";
@@ -42,6 +43,7 @@ export class HenryRuntime {
   readonly goals: GoalService;
   readonly reminders: ReminderService;
   readonly linkedin: LinkedInDraftService;
+  readonly launch: LaunchCrewService;
   readonly mailwatch: MailWatchService;
   readonly draftReplies: DraftRepliesService;
   private _knowledge?: KnowledgeBase;
@@ -82,6 +84,7 @@ export class HenryRuntime {
     this.screenshots = new ScreenshotSorterService(config, this.activity, this.agent.providerRunner);
     this.goals = new GoalService(config, this.activity, this.memory, this.luna);
     this.linkedin = new LinkedInDraftService(config, this.activity, this.memory, this.agent.providerRunner);
+    this.launch = new LaunchCrewService(config, this.activity, this.memory, () => this.knowledge, this.agent.providerRunner);
   }
 
   /** Lazily opens the GrowthX knowledge DB on first domain-relevant turn; keeps boot fast. */
