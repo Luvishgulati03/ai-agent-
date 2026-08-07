@@ -52,8 +52,14 @@ export class HenryAgent {
       }
     }
     if (knowledgeBlock) {
+      // Routing brain: which lane answers which part of the question. The corpus header
+      // (coverage strong/partial, or the explicit NO-coverage marker) is the signal; the
+      // rules below are the policy. Gap turns get the short rule (prompt diet).
+      const noCoverage = knowledgeBlock.startsWith("--- Curated knowledge: NO");
       knowledgeBlock = [
-        "GROUNDING RULE: the block below is the organization's tried-and-tested founder knowledge. When it covers Dad's question, ground your answer in it and CITE the module names you drew from. Where it does not cover something, say so explicitly and clearly label that part as general knowledge — never blend the two silently.",
+        noCoverage
+          ? "KNOWLEDGE GAP: the curated corpus was consulted and has nothing for this query. For live or external facts (markets, competitors, regulation, pricing, news, docs) RESEARCH THE WEB NOW in this same run — claude: WebSearch+WebFetch; codex: your browser tool — read several sources and cite URL + date for every researched claim. Use general model knowledge only as labeled reasoning glue. If the research is substantial, save findings + source URLs to knowledge/research/<slug>.md and offer `knowledge add` (index only on Dad's yes)."
+          : "KNOWLEDGE ROUTING — three lanes, always labeled, never silently blended: (1) PLAYBOOK lane: the curated block below (header shows coverage strong|partial) is tried-and-tested operator knowledge — the primary source for tactics, strategy, and frameworks; CITE module names for claims drawn from it. (2) LIVE lane: for market, competitor, regulatory, pricing, or current-events facts — or wherever coverage is partial and the gap matters — research the web IN THIS RUN (claude: WebSearch+WebFetch; codex: browser tool) and cite URL + date per claim. NEVER fabricate live facts from playbooks, and never stop at 'the corpus doesn't cover it' when research can. (3) GENERAL lane: model knowledge as reasoning glue, labeled as such. PROVENANCE RULE: these playbooks skew India-centric and offline-community-heavy — when Dad's target context differs (global, online-first, another industry), name which parts transfer weakly and adapt them instead of copying. After substantial web research, save findings + URLs to knowledge/research/<slug>.md and offer `knowledge add` (index only on Dad's yes — the curated corpus stays curated).",
         knowledgeBlock,
       ].join("\n");
     }

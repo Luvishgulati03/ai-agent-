@@ -91,12 +91,22 @@ export class KnowledgeBase {
     return final;
   }
 
-  /** Labeled context block so the model treats this as tried-and-tested practice, not general knowledge. */
+  /**
+   * Labeled context block so the model treats this as tried-and-tested practice, not
+   * general knowledge. The header carries an explicit coverage band so the agent can
+   * route: strong -> trust the corpus, partial -> corpus core + web fill. An explicit
+   * NO-coverage marker (never "") keeps "consulted and empty" distinguishable from
+   * "never consulted" — that distinction triggers the web-research lane.
+   */
+  static readonly NO_COVERAGE_MARKER = "--- Curated knowledge: NO relevant coverage for this query (corpus was consulted) ---";
+
   async context(query: string, options: { k?: number; domain?: string; budgetChars?: number } = {}): Promise<string> {
     const results = await this.recall(query, options);
-    if (!results.length) return "";
+    if (!results.length) return KnowledgeBase.NO_COVERAGE_MARKER;
     const budget = options.budgetChars ?? 8000;
-    const lines: string[] = ["--- Curated knowledge (tried & tested playbooks) ---"];
+    // Bands calibrated on the fused-score scale (floor 0.02; confident hits ~0.04+).
+    const coverage = results.length >= 3 && results[0].score >= 0.04 ? "strong" : "partial";
+    const lines: string[] = [`--- Curated knowledge (tried & tested playbooks) · coverage: ${coverage} ---`];
     let used = 0;
     for (const result of results) {
       const meta = (result.metadata || {}) as Record<string, unknown>;
