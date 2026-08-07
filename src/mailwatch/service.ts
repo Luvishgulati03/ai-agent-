@@ -2,7 +2,8 @@ import fs from "node:fs/promises";
 import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ProviderRunner } from "../providers/runner.ts";
-import { updateTracker } from "./tracker.ts";
+import { updateTracker, type TrackerAppEvent } from "./tracker.ts";
+import type { HenryMemory } from "../memory/engram.ts";
 
 /** Same shape as reminders' `ReminderNotifier` — kept local so this module never imports the reminders module directly (doctrine rule 7). */
 export type MailWatchNotifier = (message: string, title?: string) => Promise<void>;
@@ -113,7 +114,24 @@ export class MailWatchService {
     private readonly activity: ActivityLog,
     private readonly runner: ProviderRunner,
     private readonly notify?: MailWatchNotifier,
+    private readonly memory?: HenryMemory,
   ) {}
+
+  /**
+   * Every tracker event becomes a durable Engram memory, so "have I applied to X?"
+   * recalls the application trail by company name. Semantic tier (facts, no decay);
+   * importance follows the stakes of the status.
+   */
+  private async memorizeAppEvents(events: TrackerAppEvent[]): Promise<void> {
+    if (!this.memory) return;
+    const weight: Record<string, number> = { offer: 9, interview: 8, assessment: 8, shortlisted: 8, rejected: 6, viewed: 5, applied: 6 };
+    for (const event of events) {
+      await this.memory.remember(
+        `Job application ${event.isNew ? "tracked" : "status update"}: ${event.company} — ${event.role} → ${event.status.toUpperCase()} (${event.dateText}). Email subject: "${event.subject}"`,
+        { tier: "semantic", importance: weight[event.status] ?? 5, metadata: { domain: "jobs", kind: "application-update", company: event.company, role: event.role, status: event.status } },
+      ).catch(() => "");
+    }
+  }
 
   private async readState(): Promise<MailWatchState> {
     try {
@@ -272,6 +290,7 @@ export class MailWatchService {
         if (this.notify) await this.notify(message, "Henry — job tracker").catch(() => undefined);
         await this.activity.record("workflow.completed", message, { jobTracker: true });
       }
+      await this.memorizeAppEvents(tracker.events);
     }
 
     return { alerts, checkedAt };
@@ -304,6 +323,7 @@ export class MailWatchService {
       if (this.notify) await this.notify(message, "Henry — job tracker").catch(() => undefined);
       await this.activity.record("workflow.completed", message, { jobTracker: true, backfill: true });
     }
+    await this.memorizeAppEvents(tracker.events);
     return { appLines: appLines.length, created: tracker.created, changed: tracker.changed, notifications: tracker.notifications };
   }
 }

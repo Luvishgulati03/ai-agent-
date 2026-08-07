@@ -76,12 +76,12 @@ export class HenryRuntime {
       (prompt) => this.agent.run(prompt).then((result) => result.response),
       (approvalId) => this.executeApproval(approvalId),
     );
-    this.mailwatch = new MailWatchService(config, this.activity, this.agent.providerRunner, this.notifyOperator);
+    this.mailwatch = new MailWatchService(config, this.activity, this.agent.providerRunner, this.notifyOperator, this.memory);
     this.draftReplies = new DraftRepliesService(config, this.activity, this.agent.providerRunner, this.notifyOperator);
     this.reviewer = new PullRequestReviewer(config, this.activity, this.approvals, this.agent.providerRunner);
     this.jobs = new JobApplicationService(config, this.activity, this.approvals, this.memory, this.agent.providerRunner);
     this.cover = new CoverLetterService(config, this.activity, this.memory, this.agent.providerRunner, this.jobs);
-    this.tailor = new TailoredApplicationService(config, this.activity, this.agent.providerRunner, this.cover);
+    this.tailor = new TailoredApplicationService(config, this.activity, this.agent.providerRunner, this.cover, this.memory);
     this.resumeEditor = new ResumeEditorService(config, this.activity, this.memory, this.agent.providerRunner);
     this.meetings = new MeetingShadowService(config, this.activity, this.memory, this.agent.providerRunner);
     this.screenshots = new ScreenshotSorterService(config, this.activity, this.agent.providerRunner);

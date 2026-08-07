@@ -379,3 +379,9 @@ The approval preview contains the complete rendered review and a content hash. E
 4. Harden GitHub re-review comment de-duplication and API fixtures.
 5. Add launchd/cron installation helpers for unattended workflows.
 6. Gather Dad’s anonymized writing examples and finish the personalized `personality.md`.
+
+## Handoff addendum — 2026-08-08 (late night)
+- **Repo home moved**: canonical = `~/Downloads/henry` (Dad's order; durable, Finder-visible). Symlink `~/dev/henry` → here keeps all old absolute paths working. Desktop stale copy retired (README pointer only; locked archive at `~/Downloads/henry-stale-desktop-archive.tar.gz`).
+- **Work-org `origin` remote removed** — `origin` and `personal` both point at github.com/Luvishgulati03/ai-agent- now.
+- **Application memory live**: jd-pipeline + mailwatch write semantic Engram memories (kinds application-prepared / application-update); 29 tracker entries seeded; naming a company recalls the trail (proven: redBus).
+- **jd pipeline**: one-page guarantee enforced (print-width measure + auto-fit + trim ladder), research-grade tailoring+cover prompts, number-guard token-exact.

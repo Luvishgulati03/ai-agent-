@@ -66,11 +66,23 @@ export interface TrackerState {
   entries: TrackerEntry[];
 }
 
+/** One concrete application event (new application or status transition) — the unit the memory layer records. */
+export interface TrackerAppEvent {
+  company: string;
+  role: string;
+  status: AppStatus;
+  subject: string;
+  dateText: string;
+  isNew: boolean;
+}
+
 export interface TrackerUpdateResult {
   /** One "📋 Application update: ..." message per genuinely new application or status transition. */
   notifications: string[];
   created: number;
   changed: number;
+  /** Mirrors notifications 1:1 with structured data, so callers can memorize transitions. */
+  events: TrackerAppEvent[];
 }
 
 export interface TrackerSummary {
@@ -160,10 +172,11 @@ export function renderMarkdown(state: TrackerState, now: Date = new Date()): str
  */
 export async function updateTracker(config: HenryConfig, lines: string[]): Promise<TrackerUpdateResult> {
   const parsed = lines.map(parseAppLine).filter((item): item is ParsedApp => item !== undefined);
-  if (parsed.length === 0) return { notifications: [], created: 0, changed: 0 };
+  if (parsed.length === 0) return { notifications: [], created: 0, changed: 0, events: [] };
 
   const state = await readTrackerState(config);
   const notifications: string[] = [];
+  const events: TrackerAppEvent[] = [];
   let created = 0;
   let changed = 0;
   const now = new Date().toISOString();
@@ -179,6 +192,7 @@ export async function updateTracker(config: HenryConfig, lines: string[]): Promi
       });
       created += 1;
       notifications.push(`📋 Application update: ${app.company} ${app.role} → ${app.status}`);
+      events.push({ company: app.company, role: app.role, status: app.status, subject: app.subject, dateText: app.dateText, isNew: true });
       continue;
     }
     const lastStatus = entry.history[entry.history.length - 1]?.status;
@@ -191,10 +205,11 @@ export async function updateTracker(config: HenryConfig, lines: string[]): Promi
     entry.history.push({ status: app.status, dateText: app.dateText, subject: app.subject, recordedAt: now });
     changed += 1;
     notifications.push(`📋 Application update: ${app.company} ${app.role} → ${app.status}`);
+    events.push({ company: app.company, role: app.role, status: app.status, subject: app.subject, dateText: app.dateText, isNew: false });
   }
 
   if (created > 0 || changed > 0) await writeTrackerState(config, state);
-  return { notifications, created, changed };
+  return { notifications, created, changed, events };
 }
 
 /** Read-only summary for `henry mailwatch tracker` — never writes. */

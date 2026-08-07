@@ -5,6 +5,7 @@ import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ProviderRunner } from "../providers/runner.ts";
 import type { CoverLetterService } from "./cover.ts";
+import type { HenryMemory } from "../memory/engram.ts";
 
 /**
  * JD-tailored applications (`henry jd`): paste a job description, get back a resume PDF
@@ -193,6 +194,7 @@ export class TailoredApplicationService {
     private readonly activity: ActivityLog,
     private readonly runner: ProviderRunner,
     private readonly cover: CoverLetterService,
+    private readonly memory?: HenryMemory,
   ) {}
 
   private tailorPrompt(base: ResumeData, baseMd: string, jd: string, feedback?: string): string {
@@ -320,6 +322,12 @@ export class TailoredApplicationService {
     await fs.copyFile(letter.markdownPath, path.join(dir, "cover-letter.md"));
 
     await this.activity.record("resume.generated", `Tailored application: ${role} at ${company}`, { dir, resumePdf }, {});
+    // Durable application memory: naming this company in any future turn recalls the
+    // full trail — which resume was sent, which cover letter, what was emphasized.
+    await this.memory?.remember(
+      `Job application prepared: ${company} — ${role} (${new Date().toISOString().slice(0, 10)}). Tailored resume PDF: ${resumePdf}. Cover letter: ${path.join(dir, "Cover_Letter.pdf")}. Emphasis: ${changes.filter((c) => !c.startsWith("✓") && !c.startsWith("⚠")).join(" | ")}`,
+      { tier: "semantic", importance: 7, metadata: { domain: "jobs", kind: "application-prepared", company, role, dir } },
+    ).catch(() => "");
     return { dir, resumePdf, coverPdf: path.join(dir, "Cover_Letter.pdf"), company, role, changes };
   }
 }
