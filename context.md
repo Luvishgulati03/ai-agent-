@@ -8,7 +8,20 @@ This file is the durable handoff for any other agentic IDE, model, or engineer w
 
 The complete architecture & roadmap plan (memory flagship, dev workflows, E2E stacks, capability roadmap, M1 resource policy, dashboard spec, open-source plan, build phases) is in **`docs/MASTER_PLAN.md`** (2026-08-06). Read it before starting any new phase; it supersedes the "next recommended phases" list at the bottom of this file.
 
-## Latest handoff — 2026-08-07 (~03:45) — latency plan shipped; runaway-reminder incident resolved
+## Latest handoff — 2026-08-07 (evening) — build day 2 complete: RAG-first, launch crew, dashboard v2, metrics
+
+Since 03:45 (all committed locally; PUSH BLOCKED — gh active account reverted to work; Dad must `gh auth login --web` as Luvishgulati03, then push ~11 commits):
+- **FULL LX extraction running** (Dad killed nightly mode): detached caffeinated process, rounds of 40 @ concurrency 3, checkpointed; ~200+/1,243 modules this run, 1,287+ new cards, ZERO failures; log: data/full-extraction.log; watcher cycles ~10min.
+- **RAG-first answers**: substantive turns get an LLM-free retrieval probe (not regex-gated); injected knowledge carries a mandatory grounding+citation rule (cite modules; label non-corpus content as general knowledge; never blend silently).
+- **Launch crew live** (§6.3): `henry launch intake|run|list` — intake derives playbook-CITED questions (live proof: 6/8 questions cited real modules); run = parallel strategist/auditor/competition + synthesized dossier. 206/206 tests.
+- **Dashboard v2**: recall lab (/memory — real recallTrace activation highlighting, why-matched panel), memory-health tiles (live: 100% coverage, 79/795ms p50/p95), re-login button, distillation progress.
+- **Metrics + eval harness**: recall coverage/zero-result/latency with engine-failure separation (Friday-brief formulas); `henry knowledge eval` — FIRST HONEST SCORE: precision@5 33%, MRR 0.29 (12 seed queries, data/eval/) — the number retrieval tuning must beat.
+- **Perf compounded**: prompt wrapper −47%; memory injection BUDGETED (67k→~3k chars — the dominant slowness, found via new phase timings promptChars/firstEventMs/firstTextMs in run metadata); known follow-up: claude -p doesn't stream (no --output-format stream-json yet) so firstTextMs=null on claude.
+- **Docs**: lx-knowledge-architecture.md (backend LX-RAG lineage mapping), dashboard-design-v2.md.
+- Incidents: harness kills long tracked background tasks (~70min) → extraction runs DETACHED via nohup; a mistyped gx-community task was fully cleaned (nothing committed anywhere; Dad's own dev servers left alone).
+- NEXT: extraction completes → `henry knowledge eval` re-run (cards should lift precision) → retrieval tuning vs the 33% baseline; claude stream-json; Dad testing round; push backlog after re-auth.
+
+## Previous handoff — 2026-08-07 (~03:45) — latency plan shipped; runaway-reminder incident resolved
 
 Post-00:30 additions (all pushed): REPL streaming + elapsed spinner; provider SESSION REUSE live (per-surface, slim resumed prompts, codex thread-id capture from thread.started, eviction retry; proven turns:2 single claude session); prompt diet rides sessions; intent tiering (smalltalk→t0 haiku, bypasses sessions — claude rejects --resume with a different --model); async post-turn memory capture; auth-failure fallback + re-login banner alert (debounced); mailwatch 5-random-daily plan; draft-replies skill (henry gmail draftreplies → real Gmail drafts, never sends); REPL buffer-and-drain queueing; living heartbeat (bpm ramps when working).
 
