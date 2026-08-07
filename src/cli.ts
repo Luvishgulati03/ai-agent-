@@ -10,6 +10,7 @@ import { parseAt, parseIn, type ReminderKind } from "./reminders/service.ts";
 import { startReminderTicker, type ReminderTickerHandle } from "./reminders/ticker.ts";
 import { sendTelegram } from "./notify/telegram.ts";
 import { createInputQueue } from "./repl/input-queue.ts";
+import { trackerSummary } from "./mailwatch/tracker.ts";
 
 const args = process.argv.slice(2);
 
@@ -429,7 +430,14 @@ async function main(): Promise<void> {
       const sub = args[1] || "check";
       if (sub === "check") print(await runtime.mailwatch.check());
       else if (sub === "status") print(await runtime.mailwatch.status());
-      else throw new Error("Usage: henry mailwatch check|status");
+      else if (sub === "tracker") {
+        const summary = await trackerSummary(runtime.config);
+        console.log(`Job tracker: ${summary.markdownPath} (${summary.total} application${summary.total === 1 ? "" : "s"})`);
+        print(summary);
+      } else if (sub === "backfill") {
+        const days = Number(option("--days")) || 30;
+        print(await runtime.mailwatch.backfill(days));
+      } else throw new Error("Usage: henry mailwatch check|status|tracker|backfill --days <n>");
     } else if (command === "linkedin") {
       const topic = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
       if (!topic) throw new Error("Usage: henry linkedin <topic...>");

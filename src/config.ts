@@ -51,6 +51,10 @@ export interface HenryConfig {
   mailwatchPath: string;
   /** Today's randomized check-times plan (§ mailwatch tick planner) — separate file so a corrupt/racy write never touches the dedupe state in `mailwatchPath`. */
   mailwatchPlanPath: string;
+  /** Canonical job-application ledger (keyed company+role, status history) — the source of truth `job-tracker.md` is regenerated from. */
+  jobTrackerPath: string;
+  /** Human-readable ledger Dad actually reads — regenerated from `jobTrackerPath` after every update. */
+  jobTrackerMarkdownPath: string;
   draftRepliesDir: string;
 }
 
@@ -131,6 +135,8 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     telegramChatId: env("TELEGRAM_CHAT_ID") || undefined,
     mailwatchPath: path.join(dataDir, "mailwatch.json"),
     mailwatchPlanPath: path.join(dataDir, "mailwatch-plan.json"),
+    jobTrackerPath: path.join(dataDir, "job-tracker.json"),
+    jobTrackerMarkdownPath: path.join(dataDir, "job-tracker.md"),
     draftRepliesDir: path.join(dataDir, "drafts"),
   };
 }

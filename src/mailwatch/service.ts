@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
 import type { ProviderRunner } from "../providers/runner.ts";
+import { updateTracker } from "./tracker.ts";
 
 /** Same shape as reminders' `ReminderNotifier` — kept local so this module never imports the reminders module directly (doctrine rule 7). */
 export type MailWatchNotifier = (message: string, title?: string) => Promise<void>;
@@ -226,14 +227,24 @@ export class MailWatchService {
       "scheduled/invitation, assessment/test invites, offer letters, recruiter outreach.",
       "DO NOT modify anything in the mailbox (no read-state, labels, drafts).",
       "For each match output exactly one line: ALERT|<message-id-or-subject-hash>|<from>|<subject>|<one-clause what it is>.",
-      "If none, output exactly NO_ALERTS.",
+      "Also search the same window for application-lifecycle emails: application confirmations",
+      "(\"your application was sent to X\", \"thanks for applying\", \"application received\") from",
+      "LinkedIn Easy Apply, Naukri, or direct company portals, plus status updates (viewed,",
+      "shortlisted, assessment invite, interview scheduled) and outcomes (rejected, offer).",
+      "For each such email output exactly one line: APP|<company>|<role>|<source: LinkedIn, Naukri,",
+      "or direct>|<status: applied, viewed, shortlisted, assessment, interview, rejected, or",
+      "offer>|<date-ish from the email>|<subject>. One email may produce both an ALERT and an APP",
+      "line when it qualifies for both.",
+      "If nothing matches either category, output exactly NO_ALERTS.",
     ].join(" ");
 
     const result = await this.runner.run(prompt, { provider: "codex", readOnly: true, role: "mailwatch" });
     const parsed: ParsedAlert[] = [];
+    const appLines: string[] = [];
     for (const line of result.response.split(/\r?\n/)) {
       const alert = parseAlertLine(line);
       if (alert) parsed.push(alert);
+      if (line.trim().startsWith("APP|")) appLines.push(line);
     }
 
     // Re-read right before writing — never trust the copy read at the top of this call.
@@ -252,6 +263,47 @@ export class MailWatchService {
     }
 
     await this.writeState({ lastCheckIso: checkedAt, seenIds: Array.from(seen) });
+
+    // APP lines feed the job-application tracker (data/job-tracker.json + .md). Deduped via the
+    // tracker's own status-history — never via seenIds above, which only guards ALERT lines.
+    if (appLines.length) {
+      const tracker = await updateTracker(this.config, appLines);
+      for (const message of tracker.notifications) {
+        if (this.notify) await this.notify(message, "Henry — job tracker").catch(() => undefined);
+        await this.activity.record("workflow.completed", message, { jobTracker: true });
+      }
+    }
+
     return { alerts, checkedAt };
+  }
+
+  /**
+   * One-off, read-only provider call scanning the last `days` of inbox for application-lifecycle
+   * emails (same APP| format as `check()`), to seed the ledger for someone who's been applying
+   * for a while before Henry started watching. Deliberately does not touch `check()`'s
+   * lastCheckIso/seenIds state — this is a separate seeding sweep, not a recurring check.
+   */
+  async backfill(days = 30): Promise<{ appLines: number; created: number; changed: number; notifications: string[] }> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const prompt = [
+      "Read-only task. Search my Gmail inbox for messages received after", since,
+      "that relate to job applications: application confirmations (\"your application was sent to X\",",
+      "\"thanks for applying\", \"application received\") from LinkedIn Easy Apply, Naukri, or direct",
+      "company portals, plus status updates (viewed, shortlisted, assessment invite, interview",
+      "scheduled) and outcomes (rejected, offer). DO NOT modify anything in the mailbox (no",
+      "read-state, labels, drafts). For each match output exactly one line:",
+      "APP|<company>|<role>|<source: LinkedIn, Naukri, or direct>|<status: applied, viewed,",
+      "shortlisted, assessment, interview, rejected, or offer>|<date-ish from the email>|<subject>.",
+      "If none, output exactly NO_ALERTS.",
+    ].join(" ");
+
+    const result = await this.runner.run(prompt, { provider: "codex", readOnly: true, role: "mailwatch-backfill" });
+    const appLines = result.response.split(/\r?\n/).filter((line) => line.trim().startsWith("APP|"));
+    const tracker = await updateTracker(this.config, appLines);
+    for (const message of tracker.notifications) {
+      if (this.notify) await this.notify(message, "Henry — job tracker").catch(() => undefined);
+      await this.activity.record("workflow.completed", message, { jobTracker: true, backfill: true });
+    }
+    return { appLines: appLines.length, created: tracker.created, changed: tracker.changed, notifications: tracker.notifications };
   }
 }
