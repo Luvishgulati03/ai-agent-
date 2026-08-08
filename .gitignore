@@ -28,3 +28,11 @@ data/job-tracker.md
 data/job-tracker.json
 data/eval/last-run.json
 data/reminder-ticker.lock
+
+# --- personal boundary (framework repo carries NO operator data) ---
+data/
+memory/
+soul.md
+personality.md
+context.md
+docs/lx-knowledge-architecture.md
