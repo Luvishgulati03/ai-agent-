@@ -27,8 +27,31 @@ interface TelegramMessage {
   text?: string;
   chat?: TelegramChat;
   from?: { id: number; is_bot?: boolean; first_name?: string; username?: string };
+  reply_to_message?: { from?: { id: number; is_bot?: boolean } };
 }
 interface TelegramUpdate { update_id: number; message?: TelegramMessage; edited_message?: TelegramMessage }
+
+interface BotIdentity { id: number; username: string }
+
+/**
+ * ADDRESSED-ONLY RAIL: Henry stores a group message ONLY when it is explicitly
+ * addressed to him — it starts with @<his-username> (case-insensitive), or it is
+ * a direct reply to one of his own messages (answering a clarification he asked).
+ * Everything else in the group is dropped unread and never persisted; teammates'
+ * general chatter is not Henry's to keep.
+ */
+export function addressedText(message: TelegramMessage, identity: BotIdentity): string | undefined {
+  const text = message.text ?? "";
+  const mention = new RegExp(`^\\s*@${identity.username}\\b[\\s:,–—-]*`, "i");
+  if (mention.test(text)) {
+    const stripped = text.replace(mention, "").trim();
+    return stripped || undefined;
+  }
+  if (message.reply_to_message?.from?.id === identity.id && message.reply_to_message.from.is_bot) {
+    return text.trim() || undefined;
+  }
+  return undefined;
+}
 
 export interface PollResult {
   polled: boolean;
@@ -47,6 +70,7 @@ export class StandupPoller {
   private interval?: ReturnType<typeof setInterval>;
   private loggedConflict = false;
   private loggedFailure = false;
+  private identity?: BotIdentity;
 
   constructor(
     private readonly config: HenryConfig,
@@ -54,6 +78,31 @@ export class StandupPoller {
     private readonly store: StandupStore,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
+
+  /**
+   * The bot's own id/username, needed for the addressed-only rail. Fetched once via
+   * getMe and cached in meta so restarts (and offline boots) don't refetch.
+   */
+  private async ensureIdentity(): Promise<BotIdentity | undefined> {
+    if (this.identity) return this.identity;
+    const cached = this.store.getMeta("bot:identity");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as BotIdentity;
+        if (parsed.id && parsed.username) { this.identity = parsed; return parsed; }
+      } catch { /* refetch below */ }
+    }
+    try {
+      const response = await this.fetchImpl(`https://api.telegram.org/bot${this.config.telegramBotToken}/getMe`);
+      const payload = await response.json() as { ok?: boolean; result?: { id?: number; username?: string } };
+      if (payload.ok === true && payload.result?.id && payload.result.username) {
+        this.identity = { id: payload.result.id, username: payload.result.username };
+        this.store.setMeta("bot:identity", JSON.stringify(this.identity));
+        return this.identity;
+      }
+    } catch { /* offline — try again next poll */ }
+    return undefined;
+  }
 
   get configured(): boolean {
     return Boolean(this.config.telegramBotToken && this.config.telegramStandupChatId);
@@ -137,6 +186,7 @@ export class StandupPoller {
       return { polled: false, reason: "network error", stored: 0, seenUpdates: 0 };
     }
 
+    const identity = await this.ensureIdentity();
     let stored = 0;
     let maxUpdateId = Number.isFinite(lastId) ? lastId : -1;
     for (const update of updates) {
@@ -145,6 +195,11 @@ export class StandupPoller {
       if (!message?.text || !message.chat || !message.from) continue;
       if (String(message.chat.id) !== this.config.telegramStandupChatId) continue; // scope rail: the one group, nothing else
       if (message.from.is_bot) continue; // includes our own prompts/pings echoed back
+      // Addressed-only rail: without a resolved identity nothing is stored — refusing
+      // to guess keeps "read everything" from ever being the accidental default.
+      if (!identity) continue;
+      const text = addressedText(message, identity);
+      if (!text) continue;
       const { fresh } = this.store.upsertUpdate({
         chatId: String(message.chat.id),
         messageId: message.message_id,
@@ -152,7 +207,7 @@ export class StandupPoller {
         userName: message.from.first_name || message.from.username || `user-${message.from.id}`,
         date: istDateKey(message.date),
         session: istSessionKey(message.date),
-        text: message.text,
+        text,
         edited: Boolean(update.edited_message),
       });
       if (fresh) stored += 1;

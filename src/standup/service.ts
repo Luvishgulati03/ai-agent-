@@ -27,8 +27,8 @@ export interface ScanOutcome {
 }
 
 const PROMPT_TEXTS: Record<StandupSession, string> = {
-  morning: "🌤 Standup time, team — drop yours whenever you're ready:\n• Yesterday —\n• Today —\n• Blockers —\nPlain text is fine, Henry reads it all.",
-  evening: "🌙 Progress check before we wrap the day:\n• Shipped/done today —\n• Still moving —\n• Stuck on —\nOne honest line each is plenty.",
+  morning: "🌤 Standup time, team — drop yours whenever you're ready:\n• Yesterday —\n• Today —\n• Blockers —\nStart your message by tagging me (@ this bot) — I only read messages addressed to me.",
+  evening: "🌙 Progress check before we wrap the day:\n• Shipped/done today —\n• Still moving —\n• Stuck on —\nTag me at the start so I pick it up — one honest line each is plenty.",
 };
 
 function clampList(value: unknown): string[] {

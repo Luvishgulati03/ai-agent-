@@ -6,7 +6,7 @@ import path from "node:path";
 import { loadConfig, type HenryConfig } from "../src/config.ts";
 import { ActivityLog } from "../src/activity.ts";
 import { StandupStore, istDateKey, istSessionKey } from "../src/standup/store.ts";
-import { StandupPoller, POLLER_LOCK_STALE_MS } from "../src/standup/poller.ts";
+import { StandupPoller, POLLER_LOCK_STALE_MS, addressedText } from "../src/standup/poller.ts";
 import { StandupService, parseScanResponse, renderFallbackSummary } from "../src/standup/service.ts";
 import type { ProviderRunner } from "../src/providers/runner.ts";
 import type { HenryMemory } from "../src/memory/engram.ts";
@@ -262,20 +262,45 @@ test("promptDay is idempotent per day and honest when unconfigured", async () =>
   store.close();
 });
 
-test("poller: stores only group text messages, skips bots, advances offset after storing", async () => {
+test("addressedText: mention-at-start (stripped, case-insensitive) or reply-to-bot; everything else undefined", () => {
+  const identity = { id: 42, username: "Henry_luv_bot" };
+  const msg = (text: string) => ({ message_id: 1, date: 0, text });
+  assert.equal(addressedText(msg("@Henry_luv_bot yday: shipped auth"), identity), "yday: shipped auth");
+  assert.equal(addressedText(msg("@henry_luv_bot: today metrics"), identity), "today metrics", "case-insensitive + separator stripped");
+  assert.equal(addressedText(msg("morning all, working on payments"), identity), undefined, "untagged chatter is invisible");
+  assert.equal(addressedText(msg("thanks @Henry_luv_bot"), identity), undefined, "mention must START the message");
+  assert.equal(addressedText(msg("@Henry_luv_bottle is my mug"), identity), undefined, "word boundary — no prefix-matching other names");
+  assert.equal(addressedText(msg("@Henry_luv_bot"), identity), undefined, "bare mention with no content is nothing to store");
+  assert.equal(
+    addressedText({ message_id: 2, date: 0, text: "the payments API, sorry", reply_to_message: { from: { id: 42, is_bot: true } } }, identity),
+    "the payments API, sorry",
+    "a direct reply to the bot's own message is addressed to it",
+  );
+  assert.equal(
+    addressedText({ message_id: 3, date: 0, text: "lunch?", reply_to_message: { from: { id: 7, is_bot: false } } }, identity),
+    undefined,
+    "replies to humans stay invisible",
+  );
+});
+
+test("poller: stores ONLY messages addressed to the bot, skips bots/other chats, advances offset", async () => {
   const config = tempConfig();
   const store = new StandupStore(config);
   const activity = await activityFor(config);
   const seenUrls: string[] = [];
   const fetchImpl = (async (url: string | URL) => {
     seenUrls.push(String(url));
+    if (String(url).includes("/getMe")) {
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: { id: 99, username: "henry_test_bot" } }) };
+    }
     return {
       ok: true, status: 200,
       json: async () => ({ ok: true, result: [
-        { update_id: 10, message: { message_id: 1, date: 1754640000, text: "standup yaha", chat: { id: -100777, type: "supergroup" }, from: { id: 7, first_name: "Rohan" } } },
-        { update_id: 11, message: { message_id: 2, date: 1754640001, text: "other chat", chat: { id: -555, type: "group" }, from: { id: 8, first_name: "X" } } },
-        { update_id: 12, message: { message_id: 3, date: 1754640002, text: "bot echo", chat: { id: -100777, type: "supergroup" }, from: { id: 9, is_bot: true, first_name: "Henry" } } },
-        { update_id: 13, edited_message: { message_id: 1, date: 1754640000, text: "standup yaha (edited)", chat: { id: -100777, type: "supergroup" }, from: { id: 7, first_name: "Rohan" } } },
+        { update_id: 10, message: { message_id: 1, date: 1754640000, text: "@henry_test_bot standup yaha", chat: { id: -100777, type: "supergroup" }, from: { id: 7, first_name: "Rohan" } } },
+        { update_id: 11, message: { message_id: 2, date: 1754640001, text: "@henry_test_bot other chat", chat: { id: -555, type: "group" }, from: { id: 8, first_name: "X" } } },
+        { update_id: 12, message: { message_id: 3, date: 1754640002, text: "@henry_test_bot bot echo", chat: { id: -100777, type: "supergroup" }, from: { id: 9, is_bot: true, first_name: "Henry" } } },
+        { update_id: 13, message: { message_id: 4, date: 1754640003, text: "untagged banter about lunch", chat: { id: -100777, type: "supergroup" }, from: { id: 8, first_name: "Priya" } } },
+        { update_id: 14, edited_message: { message_id: 1, date: 1754640000, text: "@henry_test_bot standup yaha (edited)", chat: { id: -100777, type: "supergroup" }, from: { id: 7, first_name: "Rohan" } } },
       ] }),
     };
   }) as unknown as typeof fetch;
@@ -283,15 +308,17 @@ test("poller: stores only group text messages, skips bots, advances offset after
   const poller = new StandupPoller(config, activity, store, fetchImpl);
   const result = await poller.pollOnce();
   assert.equal(result.polled, true);
-  assert.equal(result.seenUpdates, 4);
-  assert.equal(result.stored, 1, "only the one real group message is new");
+  assert.equal(result.seenUpdates, 5);
+  assert.equal(result.stored, 1, "only the one addressed group message is new — untagged banter must NOT be stored");
   const rows = store.unscanned(istDateKey(1754640000));
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].text, "standup yaha (edited)", "the edit must have replaced the text");
-  assert.equal(store.getMeta("poller:lastUpdateId"), "13");
+  assert.equal(rows[0].text, "standup yaha (edited)", "edit applied AND mention stripped from stored text");
+  assert.equal(store.getMeta("poller:lastUpdateId"), "14");
+  assert.equal(store.getMeta("bot:identity"), JSON.stringify({ id: 99, username: "henry_test_bot" }));
 
   await poller.pollOnce();
-  assert.match(seenUrls[1], /offset=14/, "next poll must confirm past the last update id");
+  const updatesCalls = seenUrls.filter((u) => u.includes("getUpdates"));
+  assert.match(updatesCalls[1], /offset=15/, "next poll must confirm past the last update id");
   poller.stop();
   store.close();
 });
