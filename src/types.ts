@@ -84,6 +84,8 @@ export interface WorkflowDefinition {
   name: string;
   cron: string;
   kind: "memory.dream" | "gmail.inbox" | "agent.prompt" | "knowledge.distill" | "mail.watch" | "standup.prompt" | "standup.scan" | "standup.summary";
+  /** Standup kinds only: which daily cycle this entry drives (default "morning"). */
+  session?: "morning" | "evening";
   enabled: boolean;
   prompt?: string;
   /** knowledge.distill only: modules distilled into strategy cards per run (default 15 in the scheduler). */

@@ -293,18 +293,21 @@ export class StandupService {
   }
 
   status(date = this.today()): {
-    date: string; configured: boolean; counts: ReturnType<StandupStore["countsForDate"]>;
-    posters: string[]; roster: string[]; prompted: boolean; summarized: boolean;
+    date: string; configured: boolean; posters: string[]; roster: string[];
+    sessions: Record<StandupSession, ReturnType<StandupStore["countsForDate"]> & { prompted: boolean; summarized: boolean }>;
   } {
     const rows = this.store.contentForDate(date);
+    const sessionStatus = (session: StandupSession) => ({
+      ...this.store.countsForDate(date, session),
+      prompted: Boolean(this.store.getMeta(`prompted:${date}:${session}`)),
+      summarized: Boolean(this.store.getSummary(date, session)),
+    });
     return {
       date,
       configured: this.configured,
-      counts: this.store.countsForDate(date),
       posters: [...new Set(rows.map((row) => row.userName))],
       roster: this.store.allStyles().map((style) => style.userName),
-      prompted: Boolean(this.store.getMeta(`prompted:${date}`)),
-      summarized: Boolean(this.store.getSummary(date)),
+      sessions: { morning: sessionStatus("morning"), evening: sessionStatus("evening") },
     };
   }
 }

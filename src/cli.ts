@@ -537,6 +537,9 @@ async function main(): Promise<void> {
     } else if (command === "standup") {
       const sub = args[1] || "status";
       const date = option("--date");
+      const sessionOption = option("--session") || "morning";
+      if (sessionOption !== "morning" && sessionOption !== "evening") throw new Error("--session must be morning or evening");
+      const session = sessionOption as "morning" | "evening";
       if (sub === "status") print(runtime.standup.status(date));
       else if (sub === "discover") {
         const chats = await runtime.standupPoller.discoverChats();
@@ -545,17 +548,17 @@ async function main(): Promise<void> {
           print(chats);
           console.log("\nPut the group's id into .env as HENRY_TELEGRAM_STANDUP_CHAT_ID (group ids are negative), then restart Henry.");
         }
-      } else if (sub === "prompt") print(await runtime.standup.promptDay(date));
+      } else if (sub === "prompt") print(await runtime.standup.promptDay(date, session));
       else if (sub === "scan") {
         print(await runtime.standupPoller.pollOnce());
         print(await runtime.standup.scan(date));
       } else if (sub === "summary") {
         await runtime.standupPoller.pollOnce();
         await runtime.standup.scan(date);
-        const result = await runtime.standup.summarize(date, { post: args.includes("--post") });
+        const result = await runtime.standup.summarize(date, { post: args.includes("--post"), session });
         if (result.markdown) { console.log(`\n${result.markdown}\n`); console.log(`Saved: ${result.filePath}`); }
-        else console.log(`No standups collected for ${result.date}.${result.missing.length ? ` Missing: ${result.missing.join(", ")}` : ""}`);
-      } else throw new Error("Usage: henry standup status|discover|prompt|scan|summary [--date YYYY-MM-DD] [--post]");
+        else console.log(`No ${result.session} updates collected for ${result.date}.${result.missing.length ? ` Missing: ${result.missing.join(", ")}` : ""}`);
+      } else throw new Error("Usage: henry standup status|discover|prompt|scan|summary [--date YYYY-MM-DD] [--session morning|evening] [--post]");
     } else if (command === "linkedin") {
       const topic = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
       if (!topic) throw new Error("Usage: henry linkedin <topic...>");

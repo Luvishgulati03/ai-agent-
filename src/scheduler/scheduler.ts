@@ -75,7 +75,7 @@ export class WorkflowScheduler {
       else if (definition.kind === "gmail.inbox") result = await this.gmail.inbox(20);
       else if (definition.kind === "knowledge.distill") result = await this.runKnowledgeDistill(definition);
       else if (definition.kind === "mail.watch") result = await this.runMailWatch();
-      else if (definition.kind === "standup.prompt" || definition.kind === "standup.scan" || definition.kind === "standup.summary") result = await this.runStandup(definition.kind);
+      else if (definition.kind === "standup.prompt" || definition.kind === "standup.scan" || definition.kind === "standup.summary") result = await this.runStandup(definition.kind, definition.session ?? "morning");
       else result = { skipped: true, reason: "agent.prompt workflows require an orchestrator callback" };
       await this.activity.record("workflow.completed", `Workflow ${definition.id} completed`, { result });
       return result;
@@ -151,7 +151,7 @@ export class WorkflowScheduler {
    * is holding the interval poller — the cron itself is a sufficient collector. All three
    * are safe no-ops while the Telegram group is unconfigured.
    */
-  private async runStandup(kind: "standup.prompt" | "standup.scan" | "standup.summary"): Promise<unknown> {
+  private async runStandup(kind: "standup.prompt" | "standup.scan" | "standup.summary", session: "morning" | "evening"): Promise<unknown> {
     if (!this.config.telegramBotToken || !this.config.telegramStandupChatId) {
       return { skipped: true, reason: "standup chat not configured" };
     }
@@ -163,12 +163,12 @@ export class WorkflowScheduler {
     try {
       const runner = new ProviderRunner(this.config, this.activity);
       const service = new StandupService(this.config, this.activity, runner, store, this.notifyReminderFn, this.memory);
-      if (kind === "standup.prompt") return await service.promptDay();
+      if (kind === "standup.prompt") return await service.promptDay(undefined, session);
       const poller = new StandupPoller(this.config, this.activity, store);
       await poller.pollOnce();
       if (kind === "standup.scan") return await service.scan();
-      await service.scan(); // catch late posts before composing — summary must not miss the 11:59 update
-      return await service.summarize();
+      await service.scan(); // catch late posts before composing — the summary must not miss a last-minute update
+      return await service.summarize(undefined, { session });
     } finally {
       store.close();
     }

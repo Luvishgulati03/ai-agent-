@@ -48,5 +48,29 @@
     "cron": "0 12 * * 1-5",
     "kind": "standup.summary",
     "enabled": true
+  },
+  {
+    "id": "standup-prompt-evening",
+    "name": "Evening progress ask posted to the team group",
+    "cron": "30 19 * * 1-5",
+    "kind": "standup.prompt",
+    "session": "evening",
+    "enabled": true
+  },
+  {
+    "id": "standup-scan-evening",
+    "name": "Evening progress collect+scan+nudge window",
+    "cron": "*/15 20-21 * * 1-5",
+    "kind": "standup.scan",
+    "session": "evening",
+    "enabled": true
+  },
+  {
+    "id": "standup-summary-evening",
+    "name": "Evening progress summary to Luvish (22:00, judged against the morning plan)",
+    "cron": "0 22 * * 1-5",
+    "kind": "standup.summary",
+    "session": "evening",
+    "enabled": true
   }
 ]

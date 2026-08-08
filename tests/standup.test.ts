@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { loadConfig, type HenryConfig } from "../src/config.ts";
 import { ActivityLog } from "../src/activity.ts";
-import { StandupStore, istDateKey } from "../src/standup/store.ts";
+import { StandupStore, istDateKey, istSessionKey } from "../src/standup/store.ts";
 import { StandupPoller, POLLER_LOCK_STALE_MS } from "../src/standup/poller.ts";
 import { StandupService, parseScanResponse, renderFallbackSummary } from "../src/standup/service.ts";
 import type { ProviderRunner } from "../src/providers/runner.ts";
@@ -67,6 +67,56 @@ test("store: istDateKey buckets by the IST calendar day, not UTC", () => {
   assert.equal(istDateKey(Date.UTC(2026, 7, 7, 19, 30) / 1000), "2026-08-08");
   // 2026-08-07 18:29 UTC = 2026-08-07 23:59 IST → still the 7th.
   assert.equal(istDateKey(Date.UTC(2026, 7, 7, 18, 29) / 1000), "2026-08-07");
+});
+
+test("store: istSessionKey splits morning plans from evening progress at 15:00 IST", () => {
+  // 09:00 IST (03:30 UTC) → morning; 20:00 IST (14:30 UTC) → evening.
+  assert.equal(istSessionKey(Date.UTC(2026, 7, 8, 3, 30) / 1000), "morning");
+  assert.equal(istSessionKey(Date.UTC(2026, 7, 8, 14, 30) / 1000), "evening");
+  // Boundary: 14:59 IST morning, 15:00 IST evening.
+  assert.equal(istSessionKey(Date.UTC(2026, 7, 8, 9, 29) / 1000), "morning");
+  assert.equal(istSessionKey(Date.UTC(2026, 7, 8, 9, 30) / 1000), "evening");
+});
+
+test("evening summary uses only evening rows and judges against the morning plan", async () => {
+  const config = tempConfig();
+  const store = new StandupStore(config);
+  const activity = await activityFor(config);
+  const prompts: string[] = [];
+  const runner = {
+    run: async (prompt: string) => { prompts.push(prompt); return { response: "## Evening progress — synthesized\nPriya delivered the dashboard." }; },
+  } as unknown as ProviderRunner;
+
+  // Morning: Priya planned the metrics dashboard; summary saved as the plan of record.
+  store.upsertUpdate({ chatId: "-100777", messageId: 1, userId: "u2", userName: "Priya", date: TODAY, session: "morning", text: "today: metrics dashboard" });
+  const [morningRow] = store.unscanned(TODAY);
+  store.markQuality(morningRow.id, "ok", { yesterday: [], today: ["metrics dashboard"], blockers: [] });
+  store.saveSummary(TODAY, "morning", "## Team standup\n**Priya** — today: metrics dashboard");
+
+  // Evening: her progress post lands in the evening session.
+  store.upsertUpdate({ chatId: "-100777", messageId: 2, userId: "u2", userName: "Priya", date: TODAY, session: "evening", text: "shipped the dashboard, starting alerts" });
+  const eveningRow = store.unscanned(TODAY)[0];
+  store.markQuality(eveningRow.id, "ok", { yesterday: [], today: ["shipped dashboard"], blockers: [] });
+
+  const service = new StandupService(config, activity, runner, store, undefined, undefined, async () => true);
+  const result = await service.summarize(TODAY, { session: "evening" });
+
+  assert.equal(result.session, "evening");
+  assert.match(prompts[0], /END-OF-DAY progress summary/);
+  assert.match(prompts[0], /this morning/i);
+  assert.match(prompts[0], /metrics dashboard/, "the morning plan must ride along as delivered-vs-planned context");
+  assert.ok(result.filePath?.endsWith(`${TODAY}-evening.md`));
+  assert.ok(store.getSummary(TODAY, "evening"), "evening summary stored under its own key");
+  assert.ok(store.getSummary(TODAY, "morning"), "morning summary untouched");
+
+  // Prompts are idempotent PER SESSION: morning prompt does not block the evening one.
+  const pings: string[] = [];
+  const service2 = new StandupService(config, activity, runner, store, undefined, undefined, async (_c, text) => { pings.push(text); return true; });
+  assert.equal((await service2.promptDay(TODAY, "morning")).sent, true);
+  assert.equal((await service2.promptDay(TODAY, "evening")).sent, true, "evening prompt must fire despite the morning one");
+  assert.equal((await service2.promptDay(TODAY, "evening")).sent, false, "but only once");
+  assert.match(pings[1], /Progress check/);
+  store.close();
 });
 
 test("parseScanResponse never trusts the model: bad ids, bad enums, garbage all drop", () => {
