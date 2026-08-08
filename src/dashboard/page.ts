@@ -30,12 +30,12 @@ export const DASHBOARD_HTML = `<!doctype html>
 </section>
 <section class="grid"><div class="panel full" id="status">Loading status…</div>
 <div class="panel full"><h2>Memory health</h2><div id="memory-health-body" class="muted">Loading…</div></div>
-<div class="panel wide"><h2>Ask Henry</h2><textarea id="prompt" placeholder="What should Henry investigate?"></textarea><button onclick="ask()">Run</button><pre id="answer" style="margin-top:12px"></pre></div>
+<div class="panel wide"><h2>Ask Henry</h2><p class="muted" style="margin-bottom:8px">Quick one-shot below — for real conversations use <a class="observatory-link" href="/chat" target="_blank" rel="noopener">the chat &rarr;</a></p><textarea id="prompt" placeholder="What should Henry investigate?"></textarea><button onclick="ask()">Run</button><pre id="answer" style="margin-top:12px"></pre></div>
 <div class="panel side"><h2>Dispatch a specialist</h2><select id="role"><option>architect</option><option>runtime</option><option>memory</option><option>dashboard</option><option>gmail</option><option>pr-review</option><option>job-application</option><option>qa</option></select><input id="task" placeholder="Task for the specialist"><button onclick="dispatch()">Dispatch</button><pre id="dispatchResult" style="margin-top:12px"></pre></div>
 <div class="panel wide"><h2>Activity</h2><div id="activity" class="scroll"></div></div>
 <div class="panel side"><h2>Approval queue</h2><div id="approvals" class="scroll"></div></div>
 <div class="panel full"><h2>Job applications</h2><div id="jobstats" style="margin-bottom:10px"></div><div id="jobs" class="scroll"></div></div>
-<div class="panel full holo-panel"><h2>Memory &middot; holographic</h2><canvas id="holo-canvas"></canvas><div id="holo-hud"></div><a class="observatory-link" href="/memory" target="_blank" rel="noopener">Open Memory Observatory &rarr;</a></div>
+<div class="panel full holo-panel"><h2>Memory &middot; holographic</h2><canvas id="holo-canvas"></canvas><div id="holo-hud"></div><a class="observatory-link" href="/memory" target="_blank" rel="noopener">Open Memory Observatory &rarr;</a> <a class="observatory-link" href="/chat" target="_blank" rel="noopener">Chat with Henry &rarr;</a></div>
 <div class="panel side"><h2>Knowledge base</h2><div id="knowledge"></div></div>
 <div class="panel side"><h2>Cover letters</h2><div id="covers" class="scroll"></div></div></section></main>
 <script>

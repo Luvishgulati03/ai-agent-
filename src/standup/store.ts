@@ -33,6 +33,8 @@ export interface StandupUpdateRow {
   userName: string;
   /** IST day bucket "YYYY-MM-DD" — standups belong to the day the team lives in, not UTC. */
   date: string;
+  /** morning (plans) or evening (progress) — see `istSessionKey`. */
+  session: StandupSession;
   text: string;
   receivedAt: string;
   edited: number;
@@ -53,6 +55,20 @@ export interface StyleRow {
 /** Telegram `message.date` is epoch seconds UTC; bucket it into the IST calendar day. */
 export function istDateKey(epochSeconds: number): string {
   return new Date((epochSeconds + 5.5 * 3600) * 1000).toISOString().slice(0, 10);
+}
+
+export const STANDUP_SESSIONS = ["morning", "evening"] as const;
+export type StandupSession = (typeof STANDUP_SESSIONS)[number];
+
+/**
+ * Two daily cycles: the morning standup (plans) and the night progress check.
+ * A message posted before 15:00 IST belongs to the morning session; later ones
+ * are evening progress updates. 15:00 splits the noon-summary tail from the
+ * ~19:30 evening prompt with slack on both sides.
+ */
+export function istSessionKey(epochSeconds: number): StandupSession {
+  const istHour = new Date((epochSeconds + 5.5 * 3600) * 1000).getUTCHours();
+  return istHour < 15 ? "morning" : "evening";
 }
 
 interface RawUpdateRow extends Omit<StandupUpdateRow, "parsed"> { parsed: string | null }
@@ -80,6 +96,7 @@ export class StandupStore {
         userId TEXT NOT NULL,
         userName TEXT NOT NULL,
         date TEXT NOT NULL,
+        session TEXT NOT NULL DEFAULT 'morning',
         text TEXT NOT NULL,
         receivedAt TEXT NOT NULL,
         edited INTEGER NOT NULL DEFAULT 0,
@@ -90,9 +107,11 @@ export class StandupStore {
       );
       CREATE INDEX IF NOT EXISTS idx_updates_date ON updates(date);
       CREATE TABLE IF NOT EXISTS summaries (
-        date TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        session TEXT NOT NULL DEFAULT 'morning',
         markdown TEXT NOT NULL,
-        createdAt TEXT NOT NULL
+        createdAt TEXT NOT NULL,
+        PRIMARY KEY (date, session)
       );
       CREATE TABLE IF NOT EXISTS styles (
         userId TEXT PRIMARY KEY,
@@ -103,6 +122,33 @@ export class StandupStore {
       );
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
+    this.migrate();
+  }
+
+  /**
+   * Same-day schema catch-up for databases created before the two-session split.
+   * `updates` gains the session column in place; a single-PK `summaries` table is
+   * rebuilt (dropped, not copied — the durable artifacts are data/standups/*.md,
+   * and the pre-migration table shipped the same day this migration did).
+   */
+  private migrate(): void {
+    const updateCols = (this.db.pragma("table_info(updates)") as Array<{ name: string }>).map((col) => col.name);
+    if (!updateCols.includes("session")) {
+      this.db.exec("ALTER TABLE updates ADD COLUMN session TEXT NOT NULL DEFAULT 'morning'");
+    }
+    const summaryCols = (this.db.pragma("table_info(summaries)") as Array<{ name: string }>).map((col) => col.name);
+    if (!summaryCols.includes("session")) {
+      this.db.exec(`
+        DROP TABLE summaries;
+        CREATE TABLE summaries (
+          date TEXT NOT NULL,
+          session TEXT NOT NULL DEFAULT 'morning',
+          markdown TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          PRIMARY KEY (date, session)
+        );
+      `);
+    }
   }
 
   /**
@@ -112,7 +158,7 @@ export class StandupStore {
    */
   upsertUpdate(input: {
     chatId: string; messageId: number; userId: string; userName: string;
-    date: string; text: string; edited?: boolean; now?: Date;
+    date: string; session?: StandupSession; text: string; edited?: boolean; now?: Date;
   }): { fresh: boolean } {
     const receivedAt = (input.now ?? new Date()).toISOString();
     return this.db.transaction(() => {
@@ -120,8 +166,8 @@ export class StandupStore {
         .get(input.chatId, input.messageId) as { id: number; text: string } | undefined;
       if (!existing) {
         this.db.prepare(
-          "INSERT INTO updates (chatId, messageId, userId, userName, date, text, receivedAt, edited) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        ).run(input.chatId, input.messageId, input.userId, input.userName, input.date, input.text, receivedAt, input.edited ? 1 : 0);
+          "INSERT INTO updates (chatId, messageId, userId, userName, date, session, text, receivedAt, edited) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).run(input.chatId, input.messageId, input.userId, input.userName, input.date, input.session ?? "morning", input.text, receivedAt, input.edited ? 1 : 0);
         return { fresh: true };
       }
       if (input.edited && existing.text !== input.text) {
@@ -141,18 +187,22 @@ export class StandupStore {
       .run(quality, parsed ? JSON.stringify(parsed) : null, id);
   }
 
-  /** Real standup content for a day — scanned rows minus off-topic banter. */
-  contentForDate(date: string): StandupUpdateRow[] {
-    return (this.db.prepare("SELECT * FROM updates WHERE date = ? AND quality IN ('ok','vague') ORDER BY id").all(date) as RawUpdateRow[]).map(hydrate);
+  /** Real standup content for a day — scanned rows minus off-topic banter; optionally one session's. */
+  contentForDate(date: string, session?: StandupSession): StandupUpdateRow[] {
+    const rows = session
+      ? this.db.prepare("SELECT * FROM updates WHERE date = ? AND session = ? AND quality IN ('ok','vague') ORDER BY id").all(date, session)
+      : this.db.prepare("SELECT * FROM updates WHERE date = ? AND quality IN ('ok','vague') ORDER BY id").all(date);
+    return (rows as RawUpdateRow[]).map(hydrate);
   }
 
-  countsForDate(date: string): { collected: number; unscanned: number; vague: number; clarified: number } {
-    const row = this.db.prepare(`SELECT
+  countsForDate(date: string, session?: StandupSession): { collected: number; unscanned: number; vague: number; clarified: number } {
+    const query = `SELECT
       COUNT(*) AS collected,
       SUM(CASE WHEN quality IS NULL THEN 1 ELSE 0 END) AS unscanned,
       SUM(CASE WHEN quality = 'vague' THEN 1 ELSE 0 END) AS vague,
       SUM(CASE WHEN clarified = 1 THEN 1 ELSE 0 END) AS clarified
-      FROM updates WHERE date = ?`).get(date) as Record<string, number | null>;
+      FROM updates WHERE date = ?${session ? " AND session = ?" : ""}`;
+    const row = (session ? this.db.prepare(query).get(date, session) : this.db.prepare(query).get(date)) as Record<string, number | null>;
     return {
       collected: row.collected ?? 0, unscanned: row.unscanned ?? 0,
       vague: row.vague ?? 0, clarified: row.clarified ?? 0,
@@ -170,14 +220,14 @@ export class StandupStore {
     this.db.prepare("UPDATE updates SET clarified = 1 WHERE id = ?").run(id);
   }
 
-  saveSummary(date: string, markdown: string, now: Date = new Date()): void {
+  saveSummary(date: string, session: StandupSession, markdown: string, now: Date = new Date()): void {
     this.db.prepare(
-      "INSERT INTO summaries (date, markdown, createdAt) VALUES (?, ?, ?) ON CONFLICT(date) DO UPDATE SET markdown = excluded.markdown, createdAt = excluded.createdAt",
-    ).run(date, markdown, now.toISOString());
+      "INSERT INTO summaries (date, session, markdown, createdAt) VALUES (?, ?, ?, ?) ON CONFLICT(date, session) DO UPDATE SET markdown = excluded.markdown, createdAt = excluded.createdAt",
+    ).run(date, session, markdown, now.toISOString());
   }
 
-  getSummary(date: string): { date: string; markdown: string; createdAt: string } | undefined {
-    return this.db.prepare("SELECT * FROM summaries WHERE date = ?").get(date) as { date: string; markdown: string; createdAt: string } | undefined;
+  getSummary(date: string, session: StandupSession = "morning"): { date: string; session: string; markdown: string; createdAt: string } | undefined {
+    return this.db.prepare("SELECT * FROM summaries WHERE date = ? AND session = ?").get(date, session) as { date: string; session: string; markdown: string; createdAt: string } | undefined;
   }
 
   getStyle(userId: string): StyleRow | undefined {

@@ -269,8 +269,8 @@ test("poller: refuses to run while another live process holds the lock; 409 back
 
 test("fallback summary renders parsed rows and raw fallbacks deterministically", () => {
   const rows = [
-    { id: 1, chatId: "-1", messageId: 1, userId: "u1", userName: "Rohan", date: "2026-08-08", text: "raw", receivedAt: "", edited: 0, quality: "ok" as const, clarified: 0, parsed: { yesterday: ["a"], today: ["b"], blockers: ["stuck on infra"] } },
-    { id: 2, chatId: "-1", messageId: 2, userId: "u2", userName: "Priya", date: "2026-08-08", text: "plain words only", receivedAt: "", edited: 0, quality: "vague" as const, clarified: 1, parsed: null },
+    { id: 1, chatId: "-1", messageId: 1, userId: "u1", userName: "Rohan", date: "2026-08-08", session: "morning" as const, text: "raw", receivedAt: "", edited: 0, quality: "ok" as const, clarified: 0, parsed: { yesterday: ["a"], today: ["b"], blockers: ["stuck on infra"] } },
+    { id: 2, chatId: "-1", messageId: 2, userId: "u2", userName: "Priya", date: "2026-08-08", session: "morning" as const, text: "plain words only", receivedAt: "", edited: 0, quality: "vague" as const, clarified: 1, parsed: null },
   ];
   const markdown = renderFallbackSummary("2026-08-08", rows);
   assert.match(markdown, /## Team standup — 2026-08-08/);

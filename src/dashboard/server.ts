@@ -105,6 +105,53 @@ async function observatoryHtml(): Promise<string> {
   return observatoryHtmlCache;
 }
 
+// The chat page ships as a standalone .html for the same escaping-safety reason
+// as the observatory above.
+const CHAT_HTML_PATH = fileURLToPath(new URL("./chat.html", import.meta.url));
+let chatHtmlCache: string | null = null;
+
+async function chatHtml(): Promise<string> {
+  chatHtmlCache ??= await fs.readFile(CHAT_HTML_PATH, "utf8");
+  return chatHtmlCache;
+}
+
+/**
+ * Web-chat transcript (data/chats/web-chat.json) — the page reloads it on open, so a
+ * conversation survives refreshes and browser switches. Provider-side context lives
+ * separately in the "web-chat" surface session (sessions.db); this file is only the
+ * human-readable half. Re-read before every write (reminders-clobber lesson) and
+ * capped so it never grows unbounded.
+ */
+const CHAT_TRANSCRIPT_CAP = 400;
+interface ChatMessage { role: "user" | "henry"; text: string; at: string }
+
+function chatTranscriptPath(runtime: HenryRuntime): string {
+  return path.join(runtime.config.dataDir, "chats", "web-chat.json");
+}
+
+async function readChatTranscript(runtime: HenryRuntime): Promise<ChatMessage[]> {
+  try {
+    const raw = JSON.parse(await fs.readFile(chatTranscriptPath(runtime), "utf8")) as { messages?: unknown };
+    if (!Array.isArray(raw.messages)) return [];
+    return raw.messages.filter((item): item is ChatMessage =>
+      !!item && typeof item === "object"
+      && ((item as ChatMessage).role === "user" || (item as ChatMessage).role === "henry")
+      && typeof (item as ChatMessage).text === "string");
+  } catch { return []; }
+}
+
+async function appendChatMessages(runtime: HenryRuntime, entries: ChatMessage[]): Promise<void> {
+  const filePath = chatTranscriptPath(runtime);
+  await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const fresh = await readChatTranscript(runtime);
+  const messages = [...fresh, ...entries].slice(-CHAT_TRANSCRIPT_CAP);
+  await fs.writeFile(filePath, `${JSON.stringify({ messages }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+async function clearChatTranscript(runtime: HenryRuntime): Promise<void> {
+  await fs.rm(chatTranscriptPath(runtime), { force: true });
+}
+
 // The holographic memory display is hand-rolled 3D canvas code. Same reasoning
 // as the observatory above: it ships as a plain .js asset instead of living
 // inside page.ts's template literal, where backticks/${...}/backslashes would
@@ -232,6 +279,15 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
         response.end(await observatoryHtml());
         return;
       }
+      if (request.method === "GET" && (url.pathname === "/chat" || url.pathname === "/chat/")) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+        response.end(await chatHtml());
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/chat/history") {
+        json(response, 200, { messages: await readChatTranscript(runtime) });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/holo.js") {
         response.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store" });
         response.end(await holoJs());
@@ -351,6 +407,44 @@ export function startDashboard(runtime: HenryRuntime): http.Server {
         const input = await body(request); const prompt = String(input.prompt || "");
         if (!prompt) { json(response, 400, { error: "prompt is required" }); return; }
         json(response, 200, await runtime.agent.run(prompt)); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/chat/send") {
+        const input = await body(request); const prompt = String(input.prompt || "").trim();
+        if (!prompt) { json(response, 400, { error: "prompt is required" }); return; }
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-store",
+          "connection": "keep-alive",
+        });
+        await appendChatMessages(runtime, [{ role: "user", text: prompt, at: new Date().toISOString() }]);
+        try {
+          // Same surface-session model as the REPL, its own surface: provider-side
+          // context persists across web messages until "New chat" resets it.
+          const result = await runtime.agent.run(prompt, {
+            surface: "web-chat",
+            onEvent: (event) => {
+              const text = event.parsed && typeof (event.parsed as Record<string, unknown>).text === "string"
+                ? String((event.parsed as Record<string, unknown>).text)
+                : undefined;
+              if (text?.trim()) sseWrite(response, "token", { text: text.endsWith("\n") ? text : `${text}\n` });
+            },
+          });
+          // The transcript records the authoritative final response even if the
+          // browser tab bailed mid-stream — reload shows the full reply.
+          await appendChatMessages(runtime, [{ role: "henry", text: result.response, at: new Date().toISOString() }]);
+          sseWrite(response, "done", { response: result.response, provider: result.provider, durationMs: result.durationMs });
+        } catch (error) {
+          sseWrite(response, "error", { error: error instanceof Error ? error.message : String(error) });
+        }
+        response.end();
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/chat/clear") {
+        await clearChatTranscript(runtime);
+        // Fresh conversation = fresh provider context: drop the web-chat surface session.
+        runtime.agent.providerRunner.sessions().reset("web-chat");
+        json(response, 200, { cleared: true });
+        return;
       }
       if (request.method === "POST" && url.pathname === "/api/dispatch") {
         const input = await body(request); const role = String(input.role || "architect"); const task = String(input.task || "");

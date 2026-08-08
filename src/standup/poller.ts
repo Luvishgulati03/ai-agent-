@@ -1,6 +1,6 @@
 import type { HenryConfig } from "../config.ts";
 import type { ActivityLog } from "../activity.ts";
-import { istDateKey, type StandupStore } from "./store.ts";
+import { istDateKey, istSessionKey, type StandupStore } from "./store.ts";
 
 /**
  * Inbound Telegram reader for the STANDUP GROUP only. This module READS messages and
@@ -151,6 +151,7 @@ export class StandupPoller {
         userId: String(message.from.id),
         userName: message.from.first_name || message.from.username || `user-${message.from.id}`,
         date: istDateKey(message.date),
+        session: istSessionKey(message.date),
         text: message.text,
         edited: Boolean(update.edited_message),
       });
