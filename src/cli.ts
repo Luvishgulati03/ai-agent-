@@ -34,7 +34,7 @@ function print(value: unknown): void {
 const REPL_HELP = ":status  :dashboard  :memory <query>  :provider [codex|claude]  :quit";
 
 /**
- * Dad's rule: the dashboard comes up with every interactive Henry, not just `henry dashboard`.
+ * Luvish's rule: the dashboard comes up with every interactive Henry, not just `henry dashboard`.
  * It must never take the REPL down with it. `startDashboard` throws synchronously on a bad
  * remote-host config, and `server.listen` emits EADDRINUSE asynchronously when a second Henry
  * (or the scheduler daemon) already holds the port — with no handler that's an uncaught
@@ -70,7 +70,7 @@ async function repl(runtime: HenryRuntime, reminderTicker?: ReminderTickerHandle
   rl.once("close", () => { rlClosed = true; });
   const safePrompt = (preserve = false): void => { if (!rlClosed) rl.prompt(preserve); };
   setRedraw?.(() => safePrompt(true));
-  console.log("Henry is ready, Dad. Type :help for commands or ask normally.\n");
+  console.log("Henry is ready, Luvish. Type :help for commands or ask normally.\n");
 
   const queue = createInputQueue();
   let quitting = false;
@@ -224,7 +224,7 @@ async function main(): Promise<void> {
       for (const change of out.changes) console.log(`  · ${change}`);
       console.log(`\nresume: ${out.resumePdf}\ncover:  ${out.coverPdf}`);
       // Only pop Finder for a human at a terminal — automated/test invocations
-      // repeatedly reopening the folder read as a runaway loop to Dad.
+      // repeatedly reopening the folder read as a runaway loop to Luvish.
       if (process.stdout.isTTY) {
         const { spawn } = await import("node:child_process");
         spawn("open", [out.dir], { stdio: "ignore" }).once("error", () => {});
@@ -389,7 +389,7 @@ async function main(): Promise<void> {
         const to = option("--to"); const subject = option("--subject"); const body = option("--body") || args.slice(2).filter((item) => !item.startsWith("--") && item !== to && item !== subject).join(" ");
         if (!to || !subject || !body) throw new Error("Usage: henry gmail draft --to email --subject subject --body body");
         const item = await runtime.gmail.queueEmail({ to, subject, body, threadId: option("--thread-id") });
-        print({ message: "Saved locally and queued for Dad's approval", approvalId: item.id, dashboard: `http://${runtime.config.host}:${runtime.config.port}` });
+        print({ message: "Saved locally and queued for Luvish's approval", approvalId: item.id, dashboard: `http://${runtime.config.host}:${runtime.config.port}` });
       } else if (sub === "draftreplies") {
         const limit = Number(option("--limit")) || 5;
         const result = await runtime.draftReplies.draftReplies(limit);
@@ -474,7 +474,7 @@ async function main(): Promise<void> {
       const { filePath, raw } = await runtime.goals.intake(description);
       console.log(raw);
       console.log(`\nSaved plan: ${filePath}`);
-      console.log("Dad reviews this plan, then uses `henry code`/`henry dispatch` (or asks Henry to proceed) — nothing here was auto-executed.");
+      console.log("Luvish reviews this plan, then uses `henry code`/`henry dispatch` (or asks Henry to proceed) — nothing here was auto-executed.");
     } else if (command === "remind") {
       const sub = args[1];
       if (sub === "list") {
@@ -546,7 +546,7 @@ async function main(): Promise<void> {
         const result = await runtime.launch.intake(input);
         console.log(result.markdown);
         console.log(`\nSaved: ${result.filePath}`);
-        console.log(`Dad: fill in each ANSWER: line above, save the file, then run: henry launch run ${result.slug}`);
+        console.log(`Luvish: fill in each ANSWER: line above, save the file, then run: henry launch run ${result.slug}`);
       } else if (sub === "run") {
         if (!args[2]) throw new Error("Usage: henry launch run <slug>");
         const result = await runtime.launch.run(args[2]);

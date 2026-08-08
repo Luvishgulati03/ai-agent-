@@ -10,7 +10,7 @@ import type { HenryMemory } from "../src/memory/engram.ts";
 import type { ProviderRunner } from "../src/providers/runner.ts";
 import type { RunResult } from "../src/types.ts";
 
-const EDITED_RESPONSE = "# Dad's Resume\n\nPM at Acme, 2019-2024. Rewritten for emphasis.\n";
+const EDITED_RESPONSE = "# Luvish's Resume\n\nPM at Acme, 2019-2024. Rewritten for emphasis.\n";
 
 function fakeMemory(): HenryMemory {
   return {
@@ -52,7 +52,7 @@ test("edit() throws with import guidance when resume.md is missing", async () =>
 
 test("edit() writes markdown + PDF drafts without touching resume.md", async () => {
   const { config, activity } = await setup();
-  const originalResume = "# Dad's Resume\n\nPM at Acme, 2019-2024.\n";
+  const originalResume = "# Luvish's Resume\n\nPM at Acme, 2019-2024.\n";
   await fs.writeFile(config.resumeSourcePath, originalResume, "utf8");
   const service = new ResumeEditorService(config, activity, fakeMemory(), fakeRunner(), fakeRenderResume);
 
@@ -72,7 +72,7 @@ test("edit() writes markdown + PDF drafts without touching resume.md", async () 
 
 test("promote() copies an edited draft over the canonical resume source", async () => {
   const { config, activity } = await setup();
-  await fs.writeFile(config.resumeSourcePath, "# Dad's Resume\n\nOld version.\n", "utf8");
+  await fs.writeFile(config.resumeSourcePath, "# Luvish's Resume\n\nOld version.\n", "utf8");
   const service = new ResumeEditorService(config, activity, fakeMemory(), fakeRunner(), fakeRenderResume);
 
   const draftPath = path.join(config.dataDir, "resumes", "edited-draft.md");

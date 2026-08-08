@@ -1,13 +1,13 @@
 ---
 name: job-application
-description: Frame paste-ready answers to job-application questions in Dad's voice, grounded ONLY in resume.md + application-profile.md and Henry's own real architecture. Use whenever Dad shares application questions (pasted text or a screenshot path), asks to "frame answers", or prepares a submission. Also backs cover-letter and jobs prepare flows.
+description: Frame paste-ready answers to job-application questions in Luvish's voice, grounded ONLY in resume.md + application-profile.md and Henry's own real architecture. Use whenever Luvish shares application questions (pasted text or a screenshot path), asks to "frame answers", or prepares a submission. Also backs cover-letter and jobs prepare flows.
 ---
 
 # Job application answers
 
 ## When this fires
-Dad shares application-form questions — pasted text, a URL, or a screenshot path (Read the
-image). Deliverable: one paste-ready answer block per question, in Dad's first-person voice.
+Luvish shares application-form questions — pasted text, a URL, or a screenshot path (Read the
+image). Deliverable: one paste-ready answer block per question, in Luvish's first-person voice.
 
 ## Grounding (non-negotiable)
 1. Read `resume.md` and `application-profile.md` (repo root) BEFORE writing. They are the
@@ -17,7 +17,7 @@ image). Deliverable: one paste-ready answer block per question, in Dad's first-p
    Henry architecture claims from application-profile.md verbatim-safe. Repo link:
    https://github.com/Luvishgulati03/ai-agent-
 3. Optionally run `npx tsx src/cli.ts knowledge context "<question topic>" --domain careers`
-   for positioning playbooks — cite them to Dad as suggestions, never as his experience.
+   for positioning playbooks — cite them to Luvish as suggestions, never as his experience.
 
 ## Question archetypes → answer skeletons
 - **"Demo a side project"**: text-demo walkthrough of Henry (plain-English reminder → cron
@@ -32,7 +32,7 @@ image). Deliverable: one paste-ready answer block per question, in Dad's first-p
   (architect agent + dispatched sub-agents, acceptance criteria + action budgets, never
   trust self-reports — headless-browser/test verification, continuous commits, Henry
   dogfoods the same CLIs).
-- **"Why us / why this role"**: connect THEIR product to a specific thing Dad shipped
+- **"Why us / why this role"**: connect THEIR product to a specific thing Luvish shipped
   (match domain: notifications, AI ops, ESG/logistics, events). Never generic flattery.
 - **Behavioral (conflict/failure/learning)**: use the honest-limitations list (runaway
   scheduler → admission control; eval catching a ranking regression; auth failure
@@ -43,7 +43,7 @@ image). Deliverable: one paste-ready answer block per question, in Dad's first-p
 - First person. Short sentences. A number or artifact in every answer. No "passionate",
   no "leveraging", no exclamation marks.
 - Never fabricate availability, notice periods, compensation, or visa facts — leave a
-  `[Dad: fill]` placeholder and flag it.
+  `[Luvish: fill]` placeholder and flag it.
 - If a question asks for something that does not exist yet (live URL, video), say so and
   offer the honest nearest artifact (repo, live walkthrough) — overclaiming kills offers.
-- End by listing anything you flagged for Dad to fill or verify.
+- End by listing anything you flagged for Luvish to fill or verify.

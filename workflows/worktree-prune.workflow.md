@@ -20,7 +20,7 @@ concurrency: skip
 Prune stale local git worktrees.
 
 Use the runtime context as the source of truth for repositories and their absolute
-paths. Today that means `henry.rootDir` — the Henry repo itself. (Dad: enable this once
+paths. Today that means `henry.rootDir` — the Henry repo itself. (Luvish: enable this once
 Henry is regularly dispatching work into worktrees across multiple repos — until then
 there is little to prune, which is why this workflow ships disabled.)
 

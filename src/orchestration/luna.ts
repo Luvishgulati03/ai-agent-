@@ -53,7 +53,7 @@ export class LunaOrchestrator {
       SPECIALISTS[selected],
       options.allowEdits ? "You may edit only files needed for this task and must report changed files." : "This is an investigation pass. Do not edit files; return an implementation memo with concrete next actions.",
       "Keep outbound communication staged; never post messages or comments directly.",
-      `Task from Dad: ${task}`,
+      `Task from Luvish: ${task}`,
     ].join("\n\n");
     const tier = options.tier ?? ROLE_TIER[selected];
     const result = await this.runner.run(prompt, {

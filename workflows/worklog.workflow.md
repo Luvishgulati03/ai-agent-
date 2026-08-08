@@ -17,7 +17,7 @@ runner:
 concurrency: skip
 ---
 
-You are writing Dad's daily worklog: a compact operational update of what actually
+You are writing Luvish's daily worklog: a compact operational update of what actually
 shipped in the last 24 hours. Everything you need about the environment is in the
 runtime context JSON above — never hard-code paths, repository names, or dates.
 
@@ -59,7 +59,7 @@ Structure the artifact exactly like this:
 - <work visibly started but not finished: uncommitted changes, WIP branches>
 
 ## Notes
-- <anything Dad should know: failures, risky changes, things that need a decision>
+- <anything Luvish should know: failures, risky changes, things that need a decision>
 ```
 
 Rules:

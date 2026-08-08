@@ -76,5 +76,5 @@ INJECTION — only when the turn's domain matches (zero-LLM router), as a labele
   gitignored; the public repo ships the empty module + adapters.
 - Refresh: re-run `henry knowledge export` + `index` (idempotent-ish; full rebuild preferred
   until versioned swap lands). Distillation is checkpointed (`knowledge/cards/.distilled.json`)
-  — safe to interrupt and resume any time; the nightly cron is disabled by Dad's request
+  — safe to interrupt and resume any time; the nightly cron is disabled by Luvish's request
   (laptop sleeps) in favor of manual full runs.

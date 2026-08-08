@@ -17,7 +17,7 @@ interface MailWatchState {
 }
 
 /**
- * Dad's explicit request: stop hitting codex every 45 minutes (~32x/day) and instead run 5
+ * Luvish's explicit request: stop hitting codex every 45 minutes (~32x/day) and instead run 5
  * random checks/day (~6x fewer calls). The cron tick stays frequent (every 30 min, see
  * workflows/defaults.json) purely as a scheduling heartbeat; this plan decides which ticks
  * actually do a check.

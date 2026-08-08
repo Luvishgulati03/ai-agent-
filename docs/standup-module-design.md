@@ -1,6 +1,6 @@
 # Standup module — design (approved-pending)
 
-Status: **designed, awaiting Dad's go + group setup**. Written 2026-08-08.
+Status: **designed, awaiting Luvish's go + group setup**. Written 2026-08-08.
 
 ## What it does
 
@@ -16,7 +16,7 @@ Henry runs the team's daily standup inside a Telegram group:
    off-topic chatter are classified `offtopic` and silently ignored — no nagging.
 4. **Summarize** — at window close Henry composes the team summary (per-person
    one-liners, a Blockers section with owners, a Missing list of people who didn't
-   post) and DMs it to Dad. Optionally also posted back to the group (config flag,
+   post) and DMs it to Luvish. Optionally also posted back to the group (config flag,
    default off).
 5. **Remember** — every update and every daily summary goes into Engram, so
    "what has Rohan been working on this week?" or "who was blocked on the payments
@@ -56,7 +56,7 @@ Henry runs the team's daily standup inside a Telegram group:
 - `src/standup/send.ts` — `sendStandupMessage(config, text, replyTo?)`: a second
   scope-guarded sender pinned to `telegramStandupChatId` (mirror of
   `notify/telegram.ts`'s doctrine — named surface, chat id from config only, never
-  caller-supplied, fails open). `notify/telegram.ts` stays Dad-DM-only.
+  caller-supplied, fails open). `notify/telegram.ts` stays Luvish-DM-only.
 - Config: `TELEGRAM_STANDUP_CHAT_ID` → `config.telegramStandupChatId`; window
   times + `postSummaryToGroup` in the workflow entry.
 - Scheduler: three `workflows/defaults.json` entries dispatched in `scheduler.ts` —
@@ -70,8 +70,29 @@ Henry runs the team's daily standup inside a Telegram group:
 
 - Per update: episodic, importance 5 — `Standup <date> — <person>: yesterday …;
   today …; blocked on …` with metadata `{domain:"standup", person, date}`.
-- Daily summary: semantic, importance 6; any blocker naming Dad bumps to 8 and is
+- Daily summary: semantic, importance 6; any blocker naming Luvish bumps to 8 and is
   flagged at the top of his DM.
+
+## Per-person style adaptation
+
+Henry talks to multiple humans in the group, and each should feel talked *to*:
+
+- The scan pass's output contract gains per-person **style observations** — register
+  (formal/casual), typical length, emoji habits, language mix (English/Hinglish),
+  signature quirks — extracted from the same batched call, zero extra provider spend.
+- `styles` table in `standups.db`: `(user_id PK, user_name, profile_json,
+  samples_seen, updated_at)` — merged incrementally so profiles sharpen over time;
+  a material change snapshots to Engram (`{domain:"style", person}`) so recall
+  answers "how does X write?" and future surfaces (DM bridge) inherit profiles.
+- Every per-person outbound (clarification pings today, DM replies later) is
+  composed WITH that person's profile injected: match their register, length, and
+  language mix. A one-word-Hinglish teammate gets a short casual nudge; a formal
+  one gets a crisp professional line.
+- **Rail: style tunes tone only.** Content, rails, approvals, and honesty never
+  bend per person, Henry never fakes being a human teammate, and clarifications
+  stay polite regardless of how blunt the target's own style is.
+- Henry's core persona (with Luvish and everywhere) stays constant — adaptation is
+  a surface voice, not an identity change.
 
 ## Rails (non-negotiable)
 
@@ -81,14 +102,14 @@ Henry runs the team's daily standup inside a Telegram group:
 - **Clarification pings ≤1 per person per day**, always a threaded reply, polite —
   the runaway-reminder lesson; `clarified` column enforces it.
 - Outbound is limited to exactly two pre-authorized surfaces: the standup group
-  (prompt + clarifications) and Dad's DM (summary). Nothing else, no approval
+  (prompt + clarifications) and Luvish's DM (summary). Nothing else, no approval
   bypass created.
 - Standup content stays local (`data/` is gitignored) — team data never reaches the
   public repo.
 - Telegram holds undelivered updates ~24h: if the Mac is off for a full day, that
   window's messages are unrecoverable and the summary marks a collection gap.
 
-## Dad's setup steps (only he can do these)
+## Luvish's setup steps (only he can do these)
 
 1. Create the team group; add **@Henry_luv_bot**.
 2. BotFather → `/mybots` → @Henry_luv_bot → Bot Settings → **Group Privacy →

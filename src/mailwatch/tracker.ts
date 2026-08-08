@@ -125,7 +125,7 @@ async function writeTrackerState(config: HenryConfig, state: TrackerState): Prom
   await fs.mkdir(config.dataDir, { recursive: true, mode: 0o700 });
   await fs.writeFile(config.jobTrackerPath, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   await fs.chmod(config.jobTrackerPath, 0o600).catch(() => undefined);
-  // The .md is the artifact Dad actually reads — no restrictive mode, same as cover letters / linkedin drafts.
+  // The .md is the artifact Luvish actually reads — no restrictive mode, same as cover letters / linkedin drafts.
   await fs.writeFile(config.jobTrackerMarkdownPath, renderMarkdown(state), "utf8");
 }
 

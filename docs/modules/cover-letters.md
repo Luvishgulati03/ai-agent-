@@ -19,12 +19,12 @@ Commands it adds (`src/cli.ts`, `cover` and `resume` branches):
 henry cover import <path-to-resume.docx|.md|.txt>   # one-time: writes resume.md
 henry cover <job-url | jd-file-path | jd-text>       # generate a tailored cover letter (.md + .pdf)
 henry resume edit <instructions...>                  # rewrite resume.md into a NEW draft, never overwrites
-henry resume promote <markdown-path>                 # Dad's acceptance step: draft -> canonical resume.md
+henry resume promote <markdown-path>                 # Luvish's acceptance step: draft -> canonical resume.md
 henry resume show                                    # preview the current resume.md
 ```
 
 This is entirely outbound-free — nothing here touches the approval gate; the
-output is a file on disk for Dad to read and use manually.
+output is a file on disk for Luvish to read and use manually.
 
 ## 2. Configure
 
@@ -66,7 +66,7 @@ npx playwright install chromium
   the same way.
 - **The free-form agent**: `HenryAgent.buildPrompt()` tells the provider CLI
   it can shell out to `npx tsx src/cli.ts cover <job-url-or-jd>` and
-  `npx tsx src/cli.ts resume edit "<instructions>"` directly when Dad asks.
+  `npx tsx src/cli.ts resume edit "<instructions>"` directly when Luvish asks.
 - No approval gate involvement — files are written to disk under
   `data/cover-letters/` and `data/resumes/` for manual review/use.
 

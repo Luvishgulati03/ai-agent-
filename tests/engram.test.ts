@@ -19,10 +19,10 @@ test("HenryMemory adds and recalls a memory through the real Engram database", a
     await memory.init();
 
     const id = await memory.remember(
-      "Dad prefers Codex-first terminal workflows for building Henry.",
+      "Luvish prefers Codex-first terminal workflows for building Henry.",
       { source: "captured/test-preferences.md", metadata: { test: true } },
     );
-    const results = await memory.recall("Which terminal workflow does Dad prefer for Henry?", 5);
+    const results = await memory.recall("Which terminal workflow does Luvish prefer for Henry?", 5);
 
     assert.ok(results.some((result) => result.id === id));
     assert.match(results.find((result) => result.id === id)?.content || "", /Codex-first/);

@@ -58,7 +58,7 @@ henry schedule install
 
 ## Important safety boundary
 
-Codex is configured for full local access with no interactive approval prompts. Henry separately blocks outbound messages. Email, GitHub comments, and any other message are drafted, saved to Engram, shown on the dashboard, and sent only after Dad explicitly approves them.
+Codex is configured for full local access with no interactive approval prompts. Henry separately blocks outbound messages. Email, GitHub comments, and any other message are drafted, saved to Engram, shown on the dashboard, and sent only after Luvish explicitly approves them.
 
 ## Configuration
 

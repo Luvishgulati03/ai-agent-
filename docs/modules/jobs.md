@@ -33,7 +33,7 @@ Env keys (`.env`, read by `src/config.ts`):
 HENRY_JOB_PROFILE_PATH=application-profile.md   # default shown; candidate facts (never invented)
 HENRY_RESUME_SOURCE_PATH=resume.md              # default shown; source of truth for tailoring
 HENRY_BROWSER_PROFILE_DIR=data/browser-profile  # default shown; persistent Chromium profile
-HENRY_BROWSER_HEADLESS=false                    # default shown; visible browser so Dad can watch/intervene
+HENRY_BROWSER_HEADLESS=false                    # default shown; visible browser so Luvish can watch/intervene
 ```
 
 One-time external setup:

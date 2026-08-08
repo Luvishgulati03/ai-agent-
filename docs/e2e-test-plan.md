@@ -139,7 +139,7 @@ npm test
 npm run build
 ```
 
-Provider, Gmail, and GitHub tests should be opt-in jobs guarded by explicit secrets and dedicated fixtures. They must never run against Dad’s personal Gmail or a production repository.
+Provider, Gmail, and GitHub tests should be opt-in jobs guarded by explicit secrets and dedicated fixtures. They must never run against Luvish’s personal Gmail or a production repository.
 
 ## Exit criteria
 

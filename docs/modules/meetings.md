@@ -12,7 +12,7 @@ the same mileage as gmail/jobs/knowledge.
 
 Local, offline meeting transcription and note-taking: audio file → local
 Whisper transcript → one provider CLI call that produces structured notes
-(decisions, action items, open questions) plus a **personalized-for-Dad**
+(decisions, action items, open questions) plus a **personalized-for-Luvish**
 section (his commitments, which of his projects it affects, suggested
 follow-ups — drafting any outbound message from those is explicitly left to
 the approval-gated modules, never auto-sent). Output is written as markdown,
@@ -61,7 +61,7 @@ One-time external setup:
 - **Provider runner**: `summarize()` calls `this.runner.run(prompt, { role:
   "meeting-shadow", readOnly: true })` on the shared `ProviderRunner` — one
   call per meeting, not per line of transcript.
-- **Memory (Engram)**: pulls up to 10 memories of Dad's active
+- **Memory (Engram)**: pulls up to 10 memories of Luvish's active
   projects/commitments/priorities as context before summarizing, then writes
   back an overview memory (`tier: "episodic"`, importance 6) plus one memory
   per extracted commitment (importance 7) so future turns can recall "what

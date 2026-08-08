@@ -56,8 +56,8 @@ Regardless of provider: MCP gmail tools may **read** and may **create drafts**,
 and nothing else. Henry must **never** send, reply, forward, or modify
 labels/read-state via an MCP gmail tool. Sending goes only through the approval
 queue: `npx tsx src/cli.ts gmail draft --to ... --subject ... --body ...`, then
-Dad approves (`henry approve approve <approvalId>`), then a send executes via the
-built-in integration in §3. If Dad asks Henry to send something, Henry stages it
+Luvish approves (`henry approve approve <approvalId>`), then a send executes via the
+built-in integration in §3. If Luvish asks Henry to send something, Henry stages it
 through that flow and says so — it does not attempt a send through any MCP tool
 call, and there is no code-level guardrail that would catch it if it tried (see
 `docs/modules/mcp-tools.md` §3), so this is prompt-enforced and must not be
@@ -134,8 +134,8 @@ One-time external setup (Google Cloud OAuth desktop credentials):
   the item is in `"executing"` state before it ever calls the Gmail API.
 - **The free-form agent**: `HenryAgent.buildPrompt()` (`src/agent/henry.ts`)
   tells the provider CLI it can shell out to
-  `npx tsx src/cli.ts gmail draft --to ... --subject ... --body ...` when Dad
-  asks for an email, and spells out the three-step flow: draft → Dad approves
+  `npx tsx src/cli.ts gmail draft --to ... --subject ... --body ...` when Luvish
+  asks for an email, and spells out the three-step flow: draft → Luvish approves
   (`henry approve approve <id>`) → send (`henry approve send <id>`, optionally
   scheduled via `henry remind --execute-approval`). Henry never approves on
   its own behalf. The same block also carries the MCP hard rule from §2.3.
@@ -152,7 +152,7 @@ One-time external setup (Google Cloud OAuth desktop credentials):
 npx tsx src/cli.ts gmail auth                    # completes OAuth, "Henry is connected to Gmail."
 npx tsx src/cli.ts gmail inbox --limit 3          # prints up to 3 InboxMessage objects
 npx tsx src/cli.ts gmail draft --to you@example.com --subject "test" --body "hello"
-# → { message: "Saved locally and queued for Dad's approval", approvalId: "...", dashboard: "http://127.0.0.1:7337" }
+# → { message: "Saved locally and queued for Luvish's approval", approvalId: "...", dashboard: "http://127.0.0.1:7337" }
 npx tsx src/cli.ts approve list                   # the approval shows status "pending"
 npx tsx src/cli.ts approve approve <approvalId>   # status -> "approved"
 npx tsx src/cli.ts approve send <approvalId>      # actually sends; prints the Gmail message id

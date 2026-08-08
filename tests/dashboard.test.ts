@@ -15,7 +15,7 @@ test("dashboard exposes local health and status APIs", async () => {
   const status = await (await fetch(`${base}/api/status`)).json() as { name: string; user: string };
   assert.equal(health.ok, true);
   assert.equal(status.name, "Henry");
-  assert.equal(status.user, "Dad");
+  assert.equal(status.user, "Luvish");
   const crossOrigin = await fetch(`${base}/api/ask`, { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/json" }, body: JSON.stringify({ prompt: "hello" }) });
   assert.equal(crossOrigin.status, 403);
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

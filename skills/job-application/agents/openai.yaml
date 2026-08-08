@@ -1,4 +1,4 @@
 interface:
   display_name: "Job Application Assistant"
   short_description: "Tailor job applications from visible job pages"
-  default_prompt: "Inspect a user-provided job page, tailor a truthful cover letter and questionnaire answers, save the application for review, and submit only after Dad explicitly approves."
+  default_prompt: "Inspect a user-provided job page, tailor a truthful cover letter and questionnaire answers, save the application for review, and submit only after Luvish explicitly approves."

@@ -65,7 +65,7 @@ export interface HenryConfig {
   mailwatchPlanPath: string;
   /** Canonical job-application ledger (keyed company+role, status history) — the source of truth `job-tracker.md` is regenerated from. */
   jobTrackerPath: string;
-  /** Human-readable ledger Dad actually reads — regenerated from `jobTrackerPath` after every update. */
+  /** Human-readable ledger Luvish actually reads — regenerated from `jobTrackerPath` after every update. */
   jobTrackerMarkdownPath: string;
   draftRepliesDir: string;
 }

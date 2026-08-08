@@ -6,7 +6,7 @@ rebuild it. Configure and verify only.
 
 ## 1. What it does
 
-`sendTelegram(config, text)` posts `text` to Dad's own Telegram chat via the
+`sendTelegram(config, text)` posts `text` to Luvish's own Telegram chat via the
 Bot API (`sendMessage`). It is a **fire-and-forget, fail-open** notification
 channel layered on top of the existing console + macOS-notification path
 (`notifyReminder` in `src/reminders/service.ts`) — it never replaces it and
@@ -14,7 +14,7 @@ never throws. Any failure (unconfigured, network error, timeout, non-2xx
 response) returns `false` silently.
 
 **SCOPE-GUARD**: this is an operator-notification channel only. `chat_id`
-always comes from config — Dad's own chat — and is never accepted as a
+always comes from config — Luvish's own chat — and is never accepted as a
 caller-supplied parameter. It is never a general send-to-anyone surface;
 outbound messages to other people still stage through the `ApprovalStore`
 exactly as before.
@@ -28,7 +28,7 @@ Where it's wired in (composed once, in `src/runtime.ts`, as
 - `henry telegram test` — a direct one-off send for setup verification.
 
 `henry repl`'s reminder ticker intentionally keeps its own terminal-echo
-notifier (the message prints above the prompt Dad is already watching) and
+notifier (the message prints above the prompt Luvish is already watching) and
 does not also fire Telegram.
 
 ## 2. Configure

@@ -65,7 +65,7 @@ function postingFromSnapshot(snapshot: JobPageSnapshot): JobPosting {
 
 function renderApprovalBody(draft: JobApplicationDraft): string {
   const answers = Object.entries(draft.answers).map(([question, answer]) => `### ${question}\n${answer}`).join("\n\n");
-  const missing = draft.missingFacts.length ? `\n\nMissing facts requiring Dad's input:\n${draft.missingFacts.map((item) => `- ${item}`).join("\n")}` : "";
+  const missing = draft.missingFacts.length ? `\n\nMissing facts requiring Luvish's input:\n${draft.missingFacts.map((item) => `- ${item}`).join("\n")}` : "";
   const resume = draft.resumePdfPath ? `\n\n## Tailored resume\nPDF: ${draft.resumePdfPath}\nSource: ${draft.resumeMarkdownPath}` : "";
   return [
     `Job application: ${draft.posting.title} at ${draft.posting.company}`,
@@ -79,7 +79,7 @@ function renderApprovalBody(draft: JobApplicationDraft): string {
     resume,
     missing,
     "",
-    "Submitting this application requires Dad's explicit approval.",
+    "Submitting this application requires Luvish's explicit approval.",
   ].join("\n");
 }
 

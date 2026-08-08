@@ -21,7 +21,7 @@ Create weekly published GitHub Releases from merged PRs.
 
 Use the runtime context as the source of truth. Today that means `henry.rootDir` — the
 Henry repo itself. Report on every repo you are given; say nothing about repos you were
-not given. (Dad: enable this once more repos are wired into runtime context — until
+not given. (Luvish: enable this once more repos are wired into runtime context — until
 then it only covers the Henry repo, which is why this workflow ships disabled.)
 
 Cadence: every Friday at 6:00 PM Asia/Kolkata. Can also be run manually with `!release-notes`.

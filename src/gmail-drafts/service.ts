@@ -84,7 +84,7 @@ export class DraftRepliesService {
 
   /**
    * ONE ProviderRunner.run (codex — it has the authed gmail MCP). The model reads unread
-   * inbox mail, drafts replies in Dad's voice, and creates real Gmail DRAFTS (never sends,
+   * inbox mail, drafts replies in Luvish's voice, and creates real Gmail DRAFTS (never sends,
    * never touches read-state/labels). Full bodies are written to a local markdown file for
    * audit/review alongside the Gmail drafts themselves.
    */
@@ -94,7 +94,7 @@ export class DraftRepliesService {
 
     const prompt = [
       `Read my ${limit} most recent UNREAD inbox emails that genuinely need a reply — skip newsletters, receipts, notifications, and automated blasts.`,
-      "For each one worth replying to: draft a reply in Dad's voice (persona below) — concise, direct, no corporate filler. Never invent facts, commitments, dates, or numbers you don't have; use [placeholder] for anything unknown.",
+      "For each one worth replying to: draft a reply in Luvish's voice (persona below) — concise, direct, no corporate filler. Never invent facts, commitments, dates, or numbers you don't have; use [placeholder] for anything unknown.",
       "Then CREATE A GMAIL DRAFT for it via the gmail MCP draft-creation tool, threaded to the original message. NEVER send. NEVER modify read-state or labels.",
       "For every drafted reply, output a block in EXACTLY this format (nothing else on the DRAFT_BEGIN/DRAFT_END lines):",
       "DRAFT_BEGIN",
@@ -105,7 +105,7 @@ export class DraftRepliesService {
       "DRAFT_END",
       "After ALL the blocks, output exactly one summary line per draft: DRAFTED|<to>|<subject>|<first 80 chars of the reply>",
       "If nothing needs a reply, output exactly NO_REPLIES_NEEDED and nothing else.",
-      `\n--- Dad's voice (personality.md) ---\n${persona || "n/a"}`,
+      `\n--- Luvish's voice (personality.md) ---\n${persona || "n/a"}`,
       `\n--- resume summary ---\n${summary || "n/a"}`,
     ].join("\n");
 

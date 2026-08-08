@@ -7,7 +7,7 @@ Status: **PLAN ONLY — approved build has not started.** Sources: the reference
 
 ## 1. Vision & principles
 
-Henry is a terminal-first, local-first personal engineering agent for Dad, orchestrated by Luna, with Codex primary / Claude fallback and Engram as canonical memory.
+Henry is a terminal-first, local-first personal engineering agent for Luvish, orchestrated by Luna, with Codex primary / Claude fallback and Engram as canonical memory.
 
 Non-negotiables (existing, unchanged):
 1. **Outbound approval gate** — email, GitHub comments, X messages, job submissions: staged → explicitly approved → atomically claimed → executed. Approve and execute are separate ops, always.
@@ -16,7 +16,7 @@ Non-negotiables (existing, unchanged):
 4. **Files are the source of truth** — memory, workflows, agents, runbooks are markdown on disk, git-versioned, human-editable.
 5. **Open-source by design** — the repo becomes public; all personal data (soul, personality, profile, resume, memory content, tokens) stays local-only via gitignore + templates.
 
-Process rule (Dad's standing instruction): the orchestrating model architects and does the complex work; implementation is dispatched to worker agents. Commit in clean phases; push each phase to Dad's personal GitHub.
+Process rule (Luvish's standing instruction): the orchestrating model architects and does the complex work; implementation is dispatched to worker agents. Commit in clean phases; push each phase to Luvish's personal GitHub.
 
 ## 2. Current state (verified)
 
@@ -25,7 +25,7 @@ Process rule (Dad's standing instruction): the orchestrating model architects an
 - `henry code <task> --cwd` full-access codebase tasks; provider toggle (dashboard + CLI + persisted settings); jobs dashboard panel.
 - `npx tsc --noEmit` exit 0; focused guardrail/approval tests 4/4. **All uncommitted.**
 - Known environment hazard: Desktop is iCloud-synced; iCloud evicts `node_modules` files and blocks reads forever (the "typecheck hang"). Fix: move repo off iCloud (recommended `~/dev/henry`) or `brctl download node_modules` before builds.
-- Git: remote `personal` → `https://github.com/Luvishgulati03/ai-agent-.git` (empty). gh CLI is authed as the work account — must not publish; Dad must auth the personal account first.
+- Git: remote `personal` → `https://github.com/Luvishgulati03/ai-agent-.git` (empty). gh CLI is authed as the work account — must not publish; Luvish must auth the personal account first.
 
 ## 3. Target architecture
 
@@ -47,7 +47,7 @@ Process rule (Dad's standing instruction): the orchestrating model architects an
 Friday-inspired spine (adopted):
 - **cwd-as-configuration**: dispatched work runs with cwd = target repo; the repo's own CLAUDE/AGENTS/skills configure the worker. Henry adds only persona/memory/append-prompts.
 - **Worktree isolation**: per-task `git worktree add` + copy `.env*` + symlink `node_modules`; LRU reaper that never evicts dirty trees.
-- **`<ask-owner>` escalation**: blocked background work emits a structured sentinel (what I tried / why blocked / question) that Henry routes to Dad (dashboard + terminal notification).
+- **`<ask-owner>` escalation**: blocked background work emits a structured sentinel (what I tried / why blocked / question) that Henry routes to Luvish (dashboard + terminal notification).
 - **Engine-agnostic events**: Codex JSONL mapped to one internal event shape (already true in spirit; formalize).
 - **Fail-closed guards, fail-soft features.**
 
@@ -98,7 +98,7 @@ Score-based TDD (5-signal scorecard, ≥2 ⇒ Red-Green-Refactor, else state the
 
 | Capability | Path | Cost | Notes |
 |---|---|---|---|
-| X DMs/tweets in Dad's style | Official X API v2 pay-per-use, `twitter-api-v2`, OAuth PKCE | $0.015/send (~$4.50/mo) | Approval-gated per send; "Automated" label; no scraping clients — account safety first |
+| X DMs/tweets in Luvish's style | Official X API v2 pay-per-use, `twitter-api-v2`, OAuth PKCE | $0.015/send (~$4.50/mo) | Approval-gated per send; "Automated" label; no scraping clients — account safety first |
 | X style corpus | Free X archive export → parse `direct-messages.js`/`tweets.js` → style profile in memory (not fine-tuning) | $0 | Request archive early (~24h wait) |
 | Image reading | Provider CLI native | $0 | Already works |
 | Image generation → local PNG | FLUX schnell API (Together/fal/Replicate) default; Gemini image for premium creatives | ~$0.003/img; $0.03–0.07 premium | Local gen on 8GB = slow fallback only |
@@ -110,25 +110,25 @@ Score-based TDD (5-signal scorecard, ≥2 ⇒ Red-Green-Refactor, else state the
 
 ### 6.1 Meeting-shadow module (cheapest efficient design)
 
-Henry attends Dad's meetings and produces (a) general meeting notes and (b) a personalized notes doc. All local, ~$0:
-1. **Capture**: BlackHole (free open-source audio loopback) as an aggregate device (system audio + mic) recorded via `ffmpeg`/AVFoundation. Works with any meeting app (Meet/Zoom/Teams) — no bot joins the call. *Dad follows local consent norms for recording.*
+Henry attends Luvish's meetings and produces (a) general meeting notes and (b) a personalized notes doc. All local, ~$0:
+1. **Capture**: BlackHole (free open-source audio loopback) as an aggregate device (system audio + mic) recorded via `ffmpeg`/AVFoundation. Works with any meeting app (Meet/Zoom/Teams) — no bot joins the call. *Luvish follows local consent norms for recording.*
 2. **Transcribe**: whisper.cpp `small.en` locally (Metal, ~850MB RAM, faster than realtime on M1) — run **post-meeting** by default (cheapest, no RAM contention with the meeting app); live streaming mode is a later upgrade. Optional speaker labels via whisper.cpp tinydiarize (approximate) — skip v1.
-3. **Summarize** (T1, one call): transcript → structured notes (attendees, decisions, action items, open questions) + **personalized section** built with Engram context (what Dad committed to, what affects his projects, suggested follow-ups/drafts — drafts stay approval-gated).
+3. **Summarize** (T1, one call): transcript → structured notes (attendees, decisions, action items, open questions) + **personalized section** built with Engram context (what Luvish committed to, what affects his projects, suggested follow-ups/drafts — drafts stay approval-gated).
 4. **Output**: markdown → `pandoc` → `.docx` (or plain `.txt`) saved to a meetings folder; facts + commitments captured to Engram (T0 memory-agent); surfaces on dashboard.
 Decomposition per doctrine: capture+transcribe = deterministic, summary = one T1 call, memory = T0. Cost per meeting ≈ one standard model call. Build in Phase 6.
 
 ### 6.2 The organization's knowledge base — the RAG module (digital-twin foundation)
 
-Goal: Dad's agent reasons with the organization's tried-and-tested founder knowledge (learning-module transcripts: GTM strategies, PM content, engineering content) and future sources. Design principle: **knowledge ≠ memory** — they are separate stores with different lifecycles.
+Goal: Luvish's agent reasons with the organization's tried-and-tested founder knowledge (learning-module transcripts: GTM strategies, PM content, engineering content) and future sources. Design principle: **knowledge ≠ memory** — they are separate stores with different lifecycles.
 
 | | Personal memory (Engram, existing) | Knowledge base (new `knowledge` module) |
 |---|---|---|
-| Content | Dad's life/work facts, episodic | Curated domain corpus (strategies, playbooks) |
+| Content | Luvish's life/work facts, episodic | Curated domain corpus (strategies, playbooks) |
 | Lifecycle | Decays, supersedes, promotes | Versioned, source-attributed, no decay; updates = re-ingest |
 | Injection | Every turn (profile + recall) | **On demand** — when the task's domain matches or a workflow requires it |
 
 **Architecture** (module per §3.1, all `claude -p`/Codex CLI — no API credits):
-1. **Source adapters**: first adapter = read-only Mongo export script run locally against the organization's DB (Dad's existing credentials; creds never stored in Henry). Later adapters (Notion, Slack, docs) reuse the same pipeline. Raw transcripts land in `knowledge/raw/<module>/`.
+1. **Source adapters**: first adapter = read-only Mongo export script run locally against the organization's DB (Luvish's existing credentials; creds never stored in Henry). Later adapters (Notion, Slack, docs) reuse the same pipeline. Raw transcripts land in `knowledge/raw/<module>/`.
 2. **Distillation** (T1, one pass per module): each transcript → (a) a summary doc, and (b) **strategy cards** — atomic, actionable knowledge units: `{claim, when-to-use, steps, evidence/example, source module, author}` as individual markdown files in `knowledge/cards/`. Cards, not raw chunks, are the primary recall unit (higher precision, provenance built in).
 3. **Index**: a second Engram instance at `data/knowledge.db` (reuses hybrid retrieval, graph, entity seeding, the Phase-1 local embeddings — zero new deps). Metadata: `{domain: gtm|pm|eng, module, author, sourcePath}`.
 4. **Retrieval**: cards first, raw chunks as depth fallback; entity-seeded hybrid recall; ~2k-token budget; injected as a clearly labeled block — *"Curated knowledge (tried & tested)"* — so the model treats it as authoritative practice, distinct from general knowledge. A T0 domain classifier (or explicit workflow declaration) decides when to attach it; it is never injected on unrelated turns.
@@ -144,10 +144,10 @@ Use case: "I built product X — give me the launch roadmap and GTM." One workfl
 
 | # | Agent | Tier | Task |
 |---|---|---|---|
-| 1 | intake | T1 | Reads the product (repo, docs, dashboard), then **asks Dad the missing datapoints** — the question list is derived from what the matched strategy cards require (ICP, pricing, channels, timeline). Interactive gate; no guessing. |
+| 1 | intake | T1 | Reads the product (repo, docs, dashboard), then **asks Luvish the missing datapoints** — the question list is derived from what the matched strategy cards require (ICP, pricing, channels, timeline). Interactive gate; no guessing. |
 | 2 | gtm-strategist | **T2** | Launch roadmap + GTM strategy grounded in knowledge-base recall; cites which founder playbooks it used |
 | 3 | product-auditor | T1 + deterministic | Full product review: code audit, breaks, E2E smoke (reuses review + E2E modules) → findings in closed vocabulary |
-| 4 | fixer | T1 | Fixes auditor findings; re-verified; rounds capped at 2 (Junior pattern), then escalate to Dad |
+| 4 | fixer | T1 | Fixes auditor findings; re-verified; rounds capped at 2 (Junior pattern), then escalate to Luvish |
 | 5 | competition-researcher | T1 + web search | Competitor landscape, feature/positioning gap analysis → research report |
 | 6 | synthesizer | T2 | Consolidated launch dossier: strategy + audit status + competitive gaps + roadmap → docs artifact + dashboard |
 | 7 | memory-agent | T0 | Capture decisions/outcomes to Engram |
@@ -181,23 +181,23 @@ Implementation: `/api/events` SSE endpoint + dashboard-state module (Friday patt
 ## 9. Open-source plan
 
 - **Privacy scrub before first public push**: `soul.md`, `personality.md`, `context.md` personal sections, `application-profile.md`, `resume.md`, `memory/**` content, `data/**` — all local-only (gitignore; runtime falls back to `*.example.md`).
-- Ship: `soul.example.md`, `personality.example.md`, a "Design your agent's soul" guide (structure + principles, not Dad's design), `docs/architecture.md` (public canonical architecture), scrubbed `context.md` (project context for contributors), **`BOOTSTRAP.md`** — the paste-into-Claude/Codex prompt that walks someone's agent through cloning this repo, generating their own soul/personality/profile, configuring providers, and customizing capabilities.
+- Ship: `soul.example.md`, `personality.example.md`, a "Design your agent's soul" guide (structure + principles, not Luvish's design), `docs/architecture.md` (public canonical architecture), scrubbed `context.md` (project context for contributors), **`BOOTSTRAP.md`** — the paste-into-Claude/Codex prompt that walks someone's agent through cloning this repo, generating their own soul/personality/profile, configuring providers, and customizing capabilities.
 - README overhaul, MIT license, CI (typecheck+tests on PR).
-- Push target: Dad's personal repo (`Luvishgulati03/ai-agent-`) — **needs Dad's confirmation** since he also refers to that URL as "Junior's repo"; a dedicated `henry` repo may be cleaner.
+- Push target: Luvish's personal repo (`Luvishgulati03/ai-agent-`) — **needs Luvish's confirmation** since he also refers to that URL as "Junior's repo"; a dedicated `henry` repo may be cleaner.
 
 ## 10. Build phases (in order, commit+push per phase)
 
 | Phase | Content | Executor |
 |---|---|---|
-| 0 | Unblock: move repo off iCloud, personal gh auth, run full tests+build, commit parked work in clean phases, first push | Dad (2 actions) + architect |
+| 0 | Unblock: move repo off iCloud, personal gh auth, run full tests+build, commit parked work in clean phases, first push | Luvish (2 actions) + architect |
 | 1 | Memory v1: local embeddings, extraction+debounce, arbitration/supersede, injection budget, dream-on | architect + workers |
 | 2 | Memory v2: nightly sleep-time consolidation, profile.md, entity seeding, selective rerank, recall traces | workers |
 | 3 | Workflow engine (Junior format) + web/mobile playbooks + E2E stacks (Playwright Agents, Maestro) + Friday spine (worktrees, cwd-dispatch, ask-owner) + resource manager | architect + workers |
 | 4 | Futuristic dashboard (SSE realtime, heartbeat, resources, memory observatory) | workers, spec from §8 |
-| 5 | **The organization's knowledge module + launch crew** (§6.2–6.3) — Dad's priority; needs Phase 1 embeddings + Phase 3 dispatch | architect + workers |
+| 5 | **The organization's knowledge module + launch crew** (§6.2–6.3) — Luvish's priority; needs Phase 1 embeddings + Phase 3 dispatch | architect + workers |
 | 6 | X messaging + style pipeline + image generation + screenshots + meeting shadow | workers |
 | 7 | Career booster: interview prep, mock loop, spaced practice; job-search expansion | workers |
-| 8 | **Friday/Junior capability parity** (Dad's directive 2026-08-06): everything those two agents can do, Henry can do — Friday: buffered sessions, per-thread worktrees+tmux dispatch, ask-owner, runbooks, voice daemon, vision-grounded UI control, dashboards/SSE, standup, brain-dumps, anti-spiral; Junior: workflow engine, bug pipeline (thinker/reproducer/lead), dev-server queue, action buttons, persistent agents, worklog/release-notes/worktree-prune workflows. Most are already planned in Phases 3-4; this phase closes the remainder (voice, standup/dumps, bug pipeline state machine, dev-server manager) | architect + workers |
+| 8 | **Friday/Junior capability parity** (Luvish's directive 2026-08-06): everything those two agents can do, Henry can do — Friday: buffered sessions, per-thread worktrees+tmux dispatch, ask-owner, runbooks, voice daemon, vision-grounded UI control, dashboards/SSE, standup, brain-dumps, anti-spiral; Junior: workflow engine, bug pipeline (thinker/reproducer/lead), dev-server queue, action buttons, persistent agents, worklog/release-notes/worktree-prune workflows. Most are already planned in Phases 3-4; this phase closes the remainder (voice, standup/dumps, bug pipeline state machine, dev-server manager) | architect + workers |
 | 9 | Open-source release: scrub, templates, BOOTSTRAP.md, README, CI, license | architect + workers |
 
 ## 11. Sub-agent management doctrine (the dispatch skill)
@@ -244,12 +244,12 @@ The dispatch doctrine is engine-agnostic and must be first-class on Codex, not a
 
 | # | Task | Executor | Tier/Effort | Why |
 |---|---|---|---|---|
-| 1 | Discover postings (scan boards/links Dad feeds) | discover-agent | T0 / low | Bulk scanning is triage |
+| 1 | Discover postings (scan boards/links Luvish feeds) | discover-agent | T0 / low | Bulk scanning is triage |
 | 2 | Match & score vs profile + Engram memories | match-agent | T0→T1 / low | Scoring rubric, cheap; escalate ambiguous calls |
 | 3 | Inspect posting page, extract questions | deterministic browser code + T0 cleanup | — | Playwright snapshot is code, not judgment |
 | 4 | Tailor: cover letter + answers + resume markdown | tailor-agent | **T2 / high** | The one frontier call — quality directly visible to employers |
 | 5 | Render PDF, fill form, screenshot | deterministic | — | Zero tokens |
-| 6 | Review gate | **Dad** | — | Approval boundary, non-negotiable |
+| 6 | Review gate | **Luvish** | — | Approval boundary, non-negotiable |
 | 7 | Submit approved application | deterministic (claimed approval) | — | Zero tokens |
 | 8 | Capture outcome to memory | memory-agent | T0 / low | Facts + reusable lessons |
 
@@ -273,11 +273,11 @@ Target after 1-4: first visible tokens <8s; trivial turns <10s; complex turns sa
 Any agent (Codex, Claude, or other) picking up this project MUST:
 1. Read `context.md` top-to-bottom, then this file (`docs/MASTER_PLAN.md`).
 2. Trust only verifiable state: run `git status`, `git log --oneline -5`, `npx tsc --noEmit`, and the focused tests before believing any claim about what works. Do not assume a phase is done because it is described here — phases are marked done only in `context.md`'s latest handoff section.
-3. Never invent repo names, URLs, API keys, or user decisions — every established decision is written in `context.md` ("User decisions that must remain true") or §11 of this plan. If a needed decision is absent, ask Dad; do not guess.
+3. Never invent repo names, URLs, API keys, or user decisions — every established decision is written in `context.md` ("User decisions that must remain true") or §11 of this plan. If a needed decision is absent, ask Luvish; do not guess.
 4. Follow the phase order in §10; within a phase, follow §11's dispatch doctrine.
 5. After every working session: update `context.md`'s latest-handoff section (state, what changed, next steps) and commit. The handoff is the single source of session-to-session truth.
 
-## 13. Decisions Dad must make
+## 13. Decisions Luvish must make
 
 1. **Repo target**: push Henry to `ai-agent-` (currently empty, but you also call it "Junior's repo") or create a fresh `henry` repo?
 2. **Personal GitHub auth**: run `! gh auth login` and pick the personal account (required before any push).

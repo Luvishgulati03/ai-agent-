@@ -67,7 +67,7 @@ test("generate() throws with import guidance when resume.md is missing", async (
 
 test("generate() writes markdown + PDF containing the model's response when resume.md exists", async () => {
   const { config, activity } = await setup();
-  await fs.writeFile(config.resumeSourcePath, "# Dad's Resume\n\nPM at Acme, 2019-2024.\n", "utf8");
+  await fs.writeFile(config.resumeSourcePath, "# Luvish's Resume\n\nPM at Acme, 2019-2024.\n", "utf8");
   const service = new CoverLetterService(config, activity, fakeMemory(), fakeRunner(), fakeJobs([]), fakeRenderResume);
 
   const result = await service.generate("We need a product manager to lead growth initiatives.");
@@ -84,7 +84,7 @@ test("generate() writes markdown + PDF containing the model's response when resu
 
 test("generate() calls jobs.inspect when given a URL", async () => {
   const { config, activity } = await setup();
-  await fs.writeFile(config.resumeSourcePath, "# Dad's Resume\n\nPM at Acme, 2019-2024.\n", "utf8");
+  await fs.writeFile(config.resumeSourcePath, "# Luvish's Resume\n\nPM at Acme, 2019-2024.\n", "utf8");
   const inspectCalls: string[] = [];
   const service = new CoverLetterService(config, activity, fakeMemory(), fakeRunner(), fakeJobs(inspectCalls), fakeRenderResume);
 

@@ -132,7 +132,7 @@ export class HenryRuntime {
     return provider;
   }
 
-  /** Full-access engineering task inside any local repository Dad points Henry at. */
+  /** Full-access engineering task inside any local repository Luvish points Henry at. */
   async task(instruction: string, cwd?: string): Promise<RunResult> {
     const dir = path.resolve(cwd || this.config.rootDir);
     await fs.access(dir).catch(() => { throw new Error(`Task directory does not exist: ${dir}`); });
@@ -166,7 +166,7 @@ export class HenryRuntime {
 
   async status(): Promise<Record<string, unknown>> {
     return {
-      name: "Henry", user: "Dad", provider: this.config.provider,
+      name: "Henry", user: "Luvish", provider: this.config.provider,
       rootDir: this.config.rootDir, dashboard: `http://${this.config.host}:${this.config.port}`,
       approvals: (await this.approvals.list("pending")).length,
       jobs: await this.jobs.store.summary(),
