@@ -27,5 +27,26 @@
     "cron": "*/30 * * * *",
     "kind": "mail.watch",
     "enabled": false
+  },
+  {
+    "id": "standup-prompt",
+    "name": "Standup ask posted to the team group (weekday mornings; no-op until the group is configured)",
+    "cron": "30 9 * * 1-5",
+    "kind": "standup.prompt",
+    "enabled": true
+  },
+  {
+    "id": "standup-scan",
+    "name": "Standup collect+scan+nudge window",
+    "cron": "*/15 10-11 * * 1-5",
+    "kind": "standup.scan",
+    "enabled": true
+  },
+  {
+    "id": "standup-summary",
+    "name": "Standup summary to Luvish (noon)",
+    "cron": "0 12 * * 1-5",
+    "kind": "standup.summary",
+    "enabled": true
   }
 ]

@@ -232,6 +232,7 @@ async function main(): Promise<void> {
     } else if (command === "repl") {
       keepAlive = true;
       startDashboardBeside(runtime);
+      if (runtime.startStandupPoller()) console.log("Standup poller: watching the team group.");
       let redrawPrompt: () => void = () => {};
       const ticker = startReminderTicker(runtime.reminders, runtime.activity, {
         role: "repl",
@@ -431,6 +432,7 @@ async function main(): Promise<void> {
         await runtime.scheduler.start();
         const armed = await runtime.workflowEngine.start();
         keepAlive = true;
+        if (runtime.startStandupPoller()) console.log("Standup poller: watching the team group.");
         console.log(`Henry scheduler is running (${armed.length} markdown workflow schedules armed). Press Ctrl+C to stop.`);
       }
       else if (sub === "install") { const definitions = await runtime.scheduler.definitions(); print({ cron: await writeCronFile(runtime.config, definitions), launchd: await writeLaunchdPlist(runtime.config, definitions), note: "Review the generated files before installing them into your user scheduler." }); }
@@ -532,6 +534,28 @@ async function main(): Promise<void> {
         const days = Number(option("--days")) || 30;
         print(await runtime.mailwatch.backfill(days));
       } else throw new Error("Usage: henry mailwatch check|status|tracker|backfill --days <n>");
+    } else if (command === "standup") {
+      const sub = args[1] || "status";
+      const date = option("--date");
+      if (sub === "status") print(runtime.standup.status(date));
+      else if (sub === "discover") {
+        const chats = await runtime.standupPoller.discoverChats();
+        if (chats.length === 0) console.log("No pending updates seen. Add @Henry_luv_bot to the group, have someone post one message, then rerun.");
+        else {
+          print(chats);
+          console.log("\nPut the group's id into .env as HENRY_TELEGRAM_STANDUP_CHAT_ID (group ids are negative), then restart Henry.");
+        }
+      } else if (sub === "prompt") print(await runtime.standup.promptDay(date));
+      else if (sub === "scan") {
+        print(await runtime.standupPoller.pollOnce());
+        print(await runtime.standup.scan(date));
+      } else if (sub === "summary") {
+        await runtime.standupPoller.pollOnce();
+        await runtime.standup.scan(date);
+        const result = await runtime.standup.summarize(date, { post: args.includes("--post") });
+        if (result.markdown) { console.log(`\n${result.markdown}\n`); console.log(`Saved: ${result.filePath}`); }
+        else console.log(`No standups collected for ${result.date}.${result.missing.length ? ` Missing: ${result.missing.join(", ")}` : ""}`);
+      } else throw new Error("Usage: henry standup status|discover|prompt|scan|summary [--date YYYY-MM-DD] [--post]");
     } else if (command === "linkedin") {
       const topic = args.slice(1).filter((item) => !item.startsWith("--")).join(" ");
       if (!topic) throw new Error("Usage: henry linkedin <topic...>");
@@ -555,7 +579,7 @@ async function main(): Promise<void> {
       } else if (sub === "list") {
         print(await runtime.launch.list());
       } else throw new Error('Usage: henry launch intake "<brief|path>" | run <slug> | list');
-    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, telegram, mailwatch, linkedin, launch");
+    } else throw new Error("Commands: ask, repl, dashboard, status, code, provider, jobs, cover, resume, jd, memory, dispatch, gmail, review, approve, schedule, workflow, goal, remind, telegram, mailwatch, standup, linkedin, launch");
   } finally {
     if (!keepAlive) runtime.close();
   }

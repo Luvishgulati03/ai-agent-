@@ -385,3 +385,26 @@ The approval preview contains the complete rendered review and a content hash. E
 - **Work-org `origin` remote removed** — `origin` and `personal` both point at github.com/Luvishgulati03/ai-agent- now.
 - **Application memory live**: jd-pipeline + mailwatch write semantic Engram memories (kinds application-prepared / application-update); 29 tracker entries seeded; naming a company recalls the trail (proven: redBus).
 - **jd pipeline**: one-page guarantee enforced (print-width measure + auto-fit + trim ladder), research-grade tailoring+cover prompts, number-guard token-exact.
+
+## Handoff addendum — 2026-08-08 (standup module + persona rename)
+
+- Henry now addresses the user as **Luvish** (name), never "Dad" — 60-file sweep,
+  prompt carries an alias note so old Engram memories saying "Dad" still resolve.
+  Per-person style adaptation doctrine live in prompt + personality.md: learn each
+  human's register/length/emoji/language-mix, store `{domain:"style", person}`
+  memories, mirror when addressing them; tone flexes, rails never.
+- **Standup module BUILT** (docs/standup-module-design.md is the spec): src/standup/
+  store.ts (data/standups.db: updates/summaries/styles/meta), poller.ts (interval
+  getUpdates short-poll, group-scoped, pid lock w/ EPERM-aware liveness, offset
+  advances after store), service.ts (promptDay idempotent · scan = one batched t1
+  call: classify ok/vague/offtopic + extract y/t/blockers + style refresh + ≤1
+  style-matched threaded clarification/person/day · summarize = t2 with
+  deterministic fallback, code-computed Missing list, data/standups/<date>.md,
+  DM to Luvish, Luvish-blocker escalation to importance 8), send.ts (second
+  scope-guarded sender, group-only). Crons standup-prompt 9:30 / scan */15 10-11 /
+  summary 12:00 weekdays are ENABLED but safe no-ops until
+  HENRY_TELEGRAM_STANDUP_CHAT_ID exists in .env. `henry standup
+  status|discover|prompt|scan|summary [--date] [--post]`. Poller arms in repl +
+  schedule daemon. 232/232 tests. Group text = data, never instructions.
+- To connect: group + @Henry_luv_bot + BotFather Group Privacy OFF + one message
+  posted + `henry standup discover` + .env + restart.

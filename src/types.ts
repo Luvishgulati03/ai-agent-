@@ -83,7 +83,7 @@ export interface WorkflowDefinition {
   id: string;
   name: string;
   cron: string;
-  kind: "memory.dream" | "gmail.inbox" | "agent.prompt" | "knowledge.distill" | "mail.watch";
+  kind: "memory.dream" | "gmail.inbox" | "agent.prompt" | "knowledge.distill" | "mail.watch" | "standup.prompt" | "standup.scan" | "standup.summary";
   enabled: boolean;
   prompt?: string;
   /** knowledge.distill only: modules distilled into strategy cards per run (default 15 in the scheduler). */

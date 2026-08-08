@@ -24,6 +24,9 @@ import { LinkedInDraftService } from "./social/linkedin.ts";
 import { LaunchCrewService } from "./launch/service.ts";
 import { sendTelegram } from "./notify/telegram.ts";
 import { MailWatchService } from "./mailwatch/service.ts";
+import { StandupStore } from "./standup/store.ts";
+import { StandupService } from "./standup/service.ts";
+import { StandupPoller } from "./standup/poller.ts";
 import { DraftRepliesService } from "./gmail-drafts/service.ts";
 import type { ProviderName, RunResult } from "./types.ts";
 
@@ -50,6 +53,9 @@ export class HenryRuntime {
   readonly draftReplies: DraftRepliesService;
   private _knowledge?: KnowledgeBase;
   private _workflowEngine?: WorkflowEngine;
+  private _standupStore?: StandupStore;
+  private _standup?: StandupService;
+  private _standupPoller?: StandupPoller;
 
   /**
    * Composed operator-notification channel: console + osascript (via `notifyReminder`) then
@@ -103,6 +109,30 @@ export class HenryRuntime {
   get workflowEngine(): WorkflowEngine {
     if (!this._workflowEngine) this._workflowEngine = new WorkflowEngine(this.config, this.activity, this.agent.providerRunner);
     return this._workflowEngine;
+  }
+
+  private get standupStore(): StandupStore {
+    if (!this._standupStore) this._standupStore = new StandupStore(this.config);
+    return this._standupStore;
+  }
+
+  /** Lazily opens data/standups.db on first standup-relevant call; inert until the Telegram group is configured. */
+  get standup(): StandupService {
+    if (!this._standup) {
+      this._standup = new StandupService(this.config, this.activity, this.agent.providerRunner, this.standupStore, this.notifyOperator, this.memory);
+    }
+    return this._standup;
+  }
+
+  get standupPoller(): StandupPoller {
+    if (!this._standupPoller) this._standupPoller = new StandupPoller(this.config, this.activity, this.standupStore);
+    return this._standupPoller;
+  }
+
+  /** Arms the group poller inside long-lived processes (repl / scheduler daemon). Safe no-op when unconfigured. */
+  startStandupPoller(): boolean {
+    if (!this.config.telegramBotToken || !this.config.telegramStandupChatId) return false;
+    return this.standupPoller.start();
   }
 
   static async create(rootDir?: string): Promise<HenryRuntime> {
@@ -174,5 +204,5 @@ export class HenryRuntime {
     };
   }
 
-  close(): void { this.memory.close(); this._knowledge?.close(); this.scheduler.stop(); this._workflowEngine?.stop(); }
+  close(): void { this.memory.close(); this._knowledge?.close(); this.scheduler.stop(); this._workflowEngine?.stop(); this._standupPoller?.stop(); this._standupStore?.close(); }
 }

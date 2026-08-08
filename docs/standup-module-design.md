@@ -1,6 +1,13 @@
-# Standup module — design (approved-pending)
+# Standup module — design
 
-Status: **designed, awaiting Luvish's go + group setup**. Written 2026-08-08.
+Status: **BUILT 2026-08-08** (src/standup/: store, poller, service, send; scheduler kinds
++ crons armed as safe no-ops; `henry standup` CLI; 10 tests). Awaiting only the group
+connection: create group → add @Henry_luv_bot → BotFather Group Privacy off → someone
+posts → `henry standup discover` → put the negative id in `.env` as
+`HENRY_TELEGRAM_STANDUP_CHAT_ID` → restart Henry. Implementation notes vs this design:
+transport is interval short-polling (60s) instead of a held long-poll — this laptop
+sleeps on lid-close and a short poll survives sleep/wake for free; scan runs tier t1,
+summary t2; the noon summary cron polls + scans late posts before composing.
 
 ## What it does
 

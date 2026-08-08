@@ -60,6 +60,11 @@ export interface HenryConfig {
   /** Operator-notification channel only (never a general send-to-anyone surface). */
   telegramBotToken?: string;
   telegramChatId?: string;
+  /** The team standup group — the ONLY chat the standup poller reads and the group sender writes. */
+  telegramStandupChatId?: string;
+  standupDbPath: string;
+  /** Rendered per-day standup summaries Luvish actually reads (`data/standups/<date>.md`). */
+  standupsDir: string;
   mailwatchPath: string;
   /** Today's randomized check-times plan (§ mailwatch tick planner) — separate file so a corrupt/racy write never touches the dedupe state in `mailwatchPath`. */
   mailwatchPlanPath: string;
@@ -147,6 +152,9 @@ export function loadConfig(rootDir = defaultRoot): HenryConfig {
     socialDir: path.join(dataDir, "social"),
     telegramBotToken: env("TELEGRAM_BOT_TOKEN") || undefined,
     telegramChatId: env("TELEGRAM_CHAT_ID") || undefined,
+    telegramStandupChatId: env("TELEGRAM_STANDUP_CHAT_ID") || undefined,
+    standupDbPath: path.join(dataDir, "standups.db"),
+    standupsDir: path.join(dataDir, "standups"),
     mailwatchPath: path.join(dataDir, "mailwatch.json"),
     mailwatchPlanPath: path.join(dataDir, "mailwatch-plan.json"),
     jobTrackerPath: path.join(dataDir, "job-tracker.json"),
